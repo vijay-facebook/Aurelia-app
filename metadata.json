@@ -1,0 +1,6 @@
+{
+  "name": "Nexora — Artisanal Living & Architectural Studio",
+  "description": "Curated luxury furniture, architectural lighting, and artisanal home artifacts with AI studio interior styling.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
