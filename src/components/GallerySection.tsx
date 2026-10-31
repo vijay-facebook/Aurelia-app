@@ -1,8 +1,11 @@
 import React from 'react';
-import { GALLERY_IMAGES } from '../data/aureliaData';
+import { useConfig } from '../context/ConfigContext';
 import { Instagram } from 'lucide-react';
 
 export const GallerySection: React.FC = () => {
+  const { config } = useConfig();
+  if (!config.sectionsVisibility.gallery) return null;
+
   return (
     <section id="gallery" className="py-24 lg:py-32 bg-[#EFE6DA] border-y border-[#D8C8B4] font-sans">
       <div className="max-w-[1440px] mx-auto px-6 lg:px-12">
@@ -11,27 +14,27 @@ export const GallerySection: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-12">
           <div>
             <span className="text-[11px] font-sans tracking-[0.3em] uppercase text-[#8C6A43] font-medium block mb-2">
-              Gallery
+              {config.headings.galleryEyebrow}
             </span>
             <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-light text-[#1D1612]">
-              Inside <span className="italic text-[#8C6A43]">the studio</span>
+              {config.headings.galleryTitle}
             </h2>
           </div>
 
           <a
-            href="https://instagram.com"
+            href={config.social.links.instagram || 'https://instagram.com'}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-xs font-sans uppercase tracking-widest text-[#1D1612] hover:text-[#8C6A43] transition-colors"
           >
             <Instagram className="w-4 h-4 text-[#8C6A43]" />
-            <span>@AURELIA.STUDIO</span>
+            <span>{config.social.links.instagram ? 'Instagram Feed' : '@AURELIA.STUDIO'}</span>
           </a>
         </div>
 
         {/* Gallery Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {GALLERY_IMAGES.map((item) => (
+          {config.gallery.map((item) => (
             <div
               key={item.id}
               className={`relative rounded-[8px] overflow-hidden border border-[#D8C8B4] group aspect-[4/3] bg-[#E3D7C7] ${item.span}`}
@@ -40,7 +43,7 @@ export const GallerySection: React.FC = () => {
                 src={item.image}
                 alt={item.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                referrerPolicy="no-referrer"
+                loading="lazy"
               />
 
               {/* Hover Overlay */}

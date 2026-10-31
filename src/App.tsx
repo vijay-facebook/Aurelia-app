@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { ConfigProvider } from './context/ConfigContext';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { MarqueeTicker } from './components/MarqueeTicker';
@@ -17,19 +19,19 @@ import { BookingSection } from './components/BookingSection';
 import { BookingModal } from './components/BookingModal';
 import { Footer } from './components/Footer';
 
-import { SERVICES, ServiceCard, MenuItem, SessionOffer } from './data/aureliaData';
-import { Calendar, Check } from 'lucide-react';
+import { ServiceItemConfig, MenuItemConfig, OfferItemConfig } from './config/types';
+import { Calendar, Check, Shield } from 'lucide-react';
+import { AdminLogin } from './admin/AdminLogin';
+import { AdminDashboard } from './admin/AdminDashboard';
+import { PreviewShell } from './components/PreviewShell';
 
-export default function App() {
+function PublicWebsite() {
   const [activeSection, setActiveSection] = useState('hero');
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [selectedServiceTitle, setSelectedServiceTitle] = useState<string | undefined>(undefined);
 
-  // Saved Wishlist Services
-  const [wishlistServices, setWishlistServices] = useState<ServiceCard[]>([
-    SERVICES[1], // Hair Colour
-    SERVICES[2], // Skin Care
-  ]);
+  // Wishlist items
+  const [wishlistServices, setWishlistServices] = useState<ServiceItemConfig[]>([]);
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -53,14 +55,14 @@ export default function App() {
     setIsBookingModalOpen(true);
   };
 
-  const handleClaimOffer = (offer: SessionOffer) => {
+  const handleClaimOffer = (offer: OfferItemConfig) => {
     const fullOfferTitle = `${offer.title} (${offer.offerPrice} - Code: ${offer.code})`;
     setSelectedServiceTitle(fullOfferTitle);
     setIsBookingModalOpen(true);
     showToast(`Claimed Offer: ${offer.code}`);
   };
 
-  const handleRemoveFromWishlist = (service: ServiceCard) => {
+  const handleRemoveFromWishlist = (service: ServiceItemConfig) => {
     setWishlistServices((prev) => prev.filter((s) => s.id !== service.id));
     showToast(`Removed ${service.title} from Wishlist`);
   };
@@ -71,7 +73,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F6F1EA] text-[#1D1612] font-sans selection:bg-[#D9B98F] selection:text-[#1D1612] flex flex-col justify-between antialiased">
+    <div className="min-h-screen bg-[#F6F1EA] text-[#1D1612] font-sans selection:bg-[#D9B98F] selection:text-[#1D1612] flex flex-col justify-between antialiased relative">
       
       {/* Toast Notification */}
       {toastMessage && (
@@ -80,6 +82,16 @@ export default function App() {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Admin Panel Floating Access Link */}
+      <a
+        href="/admin"
+        className="fixed top-3 right-3 z-40 bg-[#1D1612]/80 hover:bg-[#1D1612] text-[#F6F1EA] px-3 py-1.5 rounded-full text-[10px] font-sans uppercase tracking-widest backdrop-blur-md flex items-center gap-1.5 transition-all shadow-md"
+        title="Admin CMS"
+      >
+        <Shield className="w-3 h-3 text-[#D9B98F]" />
+        <span>Admin Panel</span>
+      </a>
 
       {/* Primary Header */}
       <Header
@@ -93,7 +105,6 @@ export default function App() {
 
       {/* Main Page Body */}
       <main className="flex-1">
-        {/* Hero Section */}
         <Hero
           onOpenBooking={() => {
             setSelectedServiceTitle(undefined);
@@ -102,50 +113,41 @@ export default function App() {
           onExploreServices={() => handleNavigate('services')}
         />
 
-        {/* Marquee Ticker */}
         <MarqueeTicker />
 
-        {/* Services Grid ("Considered care, head to toe.") */}
         <ServicesGrid
-          onSelectService={(service: ServiceCard) =>
+          onSelectService={(service: ServiceItemConfig) =>
             handleOpenBookingWithService(`${service.title} (${service.price})`)
           }
         />
 
-        {/* Story Section ("A studio built on quiet expertise.") */}
         <StorySection />
 
-        {/* Staff & Senior Artists Selection Section */}
         <StaffSection
           onBookWithStylist={(stylistName: string) =>
             handleOpenBookingWithService(`Consultation with ${stylistName}`)
           }
         />
 
-        {/* Menu Section ("The Aurelia menu") */}
         <MenuSection
-          onBookItem={(item: MenuItem) =>
+          onBookItem={(item: MenuItemConfig) =>
             handleOpenBookingWithService(`${item.title} (${item.price})`)
           }
         />
 
-        {/* Gallery Section ("Inside the studio") */}
         <GallerySection />
 
-        {/* Video Gallery Section ("Stories in Motion — Before & After") */}
         <VideoGallery
           onBookService={(serviceTitle: string) =>
             handleOpenBookingWithService(serviceTitle)
           }
         />
 
-        {/* Session Offers & Packages Section */}
         <OffersSection
           onClaimOffer={handleClaimOffer}
           onShowToast={showToast}
         />
 
-        {/* Home Services Section ("Aurelia At-Home Salon & Spa") */}
         <HomeServicesSection
           onBookHomeService={(serviceTitle: string) =>
             handleOpenBookingWithService(serviceTitle)
@@ -153,45 +155,38 @@ export default function App() {
           onShowToast={showToast}
         />
 
-        {/* Kind Words / Reviews */}
         <KindWords />
 
-        {/* Social Media & Instagram Feed Section */}
         <SocialMediaSection onShowToast={showToast} />
 
-        {/* Dedicated Wishlist Section using card-nexora styling */}
         <WishlistSection
           wishlistServices={wishlistServices}
           onRemoveFromWishlist={handleRemoveFromWishlist}
           onClearWishlist={handleClearWishlist}
-          onBookService={(service: ServiceCard) =>
+          onBookService={(service: ServiceItemConfig) =>
             handleOpenBookingWithService(`${service.title} (${service.price})`)
           }
           onExploreServices={() => handleNavigate('services')}
         />
 
-        {/* Booking Reservation Section ("Your best look starts here.") */}
         <BookingSection preselectedService={selectedServiceTitle} />
       </main>
 
-      {/* Footer */}
       <Footer />
 
-      {/* Booking Popup Modal */}
       <BookingModal
         isOpen={isBookingModalOpen}
         onClose={() => setIsBookingModalOpen(false)}
         preselectedTitle={selectedServiceTitle}
       />
 
-      {/* Floating Appointment Badge Button */}
       <button
         onClick={() => {
           setSelectedServiceTitle(undefined);
           setIsBookingModalOpen(true);
         }}
         className="fixed bottom-6 right-6 z-40 bg-[#1D1612] text-[#F6F1EA] hover:bg-[#8C6A43] p-4 rounded-full shadow-2xl transition-all cursor-pointer flex items-center gap-2 group"
-        title="Book Appointment at Aurelia Studio"
+        title="Book Appointment"
       >
         <Calendar className="w-5 h-5 text-[#D9B98F]" />
         <span className="text-xs uppercase tracking-widest font-medium hidden sm:inline">
@@ -200,5 +195,29 @@ export default function App() {
       </button>
 
     </div>
+  );
+}
+
+function AdminRoute() {
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+
+  if (!isAdminAuthenticated) {
+    return <AdminLogin onLoginSuccess={() => setIsAdminAuthenticated(true)} />;
+  }
+
+  return <AdminDashboard onLogout={() => setIsAdminAuthenticated(false)} />;
+}
+
+export default function App() {
+  return (
+    <ConfigProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<PublicWebsite />} />
+          <Route path="/admin" element={<AdminRoute />} />
+          <Route path="/preview" element={<PreviewShell />} />
+        </Routes>
+      </BrowserRouter>
+    </ConfigProvider>
   );
 }

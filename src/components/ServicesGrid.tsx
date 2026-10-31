@@ -1,12 +1,16 @@
 import React from 'react';
 import { ArrowUpRight } from 'lucide-react';
-import { SERVICES, ServiceCard } from '../data/aureliaData';
+import { useConfig } from '../context/ConfigContext';
+import { ServiceItemConfig } from '../config/types';
 
 interface ServicesGridProps {
-  onSelectService: (service: ServiceCard) => void;
+  onSelectService: (service: ServiceItemConfig) => void;
 }
 
 export const ServicesGrid: React.FC<ServicesGridProps> = ({ onSelectService }) => {
+  const { config } = useConfig();
+  if (!config.sectionsVisibility.services) return null;
+
   return (
     <section id="services" className="py-24 lg:py-32 max-w-[1440px] mx-auto px-6 lg:px-12 font-sans">
       
@@ -14,11 +18,10 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({ onSelectService }) =
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 mb-16">
         <div>
           <span className="text-[11px] font-sans tracking-[0.3em] uppercase text-[#8C6A43] font-medium block mb-3">
-            Our Services
+            {config.headings.servicesEyebrow}
           </span>
           <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-light text-[#1D1612]">
-            Considered care, <br />
-            <span className="italic text-[#8C6A43]">head to toe.</span>
+            {config.headings.servicesTitle}
           </h2>
         </div>
 
@@ -27,9 +30,9 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({ onSelectService }) =
         </p>
       </div>
 
-      {/* 6 Services Grid (3x2) */}
+      {/* Services Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {SERVICES.map((service) => (
+        {config.services.map((service) => (
           <div
             key={service.id}
             onClick={() => onSelectService(service)}
@@ -41,10 +44,9 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({ onSelectService }) =
                 src={service.image}
                 alt={service.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                referrerPolicy="no-referrer"
+                loading="lazy"
               />
 
-              {/* Arrow Badge (if popular/highlighted) */}
               <div className="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-[#F6F1EA] text-[#1D1612] group-hover:bg-[#1D1612] group-hover:text-[#F6F1EA] flex items-center justify-center transition-colors shadow-sm">
                 <ArrowUpRight className="w-4 h-4" />
               </div>

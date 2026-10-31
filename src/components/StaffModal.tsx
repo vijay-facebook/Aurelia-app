@@ -1,9 +1,9 @@
 import React from 'react';
-import { X, Award, Clock, Instagram, Calendar, ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
-import { StaffMember } from '../data/aureliaData';
+import { X, Award, Clock, Instagram, CheckCircle2 } from 'lucide-react';
+import { StaffMemberConfig } from '../config/types';
 
 interface StaffModalProps {
-  staff: StaffMember | null;
+  staff: StaffMemberConfig | null;
   onClose: () => void;
   onBookWithStylist: (stylistName: string) => void;
 }
@@ -33,7 +33,7 @@ export const StaffModal: React.FC<StaffModalProps> = ({ staff, onClose, onBookWi
                 src={staff.image}
                 alt={staff.name}
                 className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
+                loading="lazy"
               />
 
               {/* Next Available Pill */}
@@ -46,15 +46,17 @@ export const StaffModal: React.FC<StaffModalProps> = ({ staff, onClose, onBookWi
               </div>
             </div>
 
-            <a
-              href={`https://instagram.com/${staff.instagram.replace('@', '')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 text-xs font-sans uppercase tracking-wider text-[#1D1612] hover:text-[#8C6A43] py-2 border border-[#D8C8B4] rounded-[6px] bg-[#EFE6DA] transition-colors"
-            >
-              <Instagram className="w-4 h-4 text-[#8C6A43]" />
-              <span>Follow {staff.instagram}</span>
-            </a>
+            {staff.instagram && (
+              <a
+                href={`https://instagram.com/${staff.instagram.replace('@', '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 text-xs font-sans uppercase tracking-wider text-[#1D1612] hover:text-[#8C6A43] py-2 border border-[#D8C8B4] rounded-[6px] bg-[#EFE6DA] transition-colors"
+              >
+                <Instagram className="w-4 h-4 text-[#8C6A43]" />
+                <span>Follow {staff.instagram}</span>
+              </a>
+            )}
           </div>
 
           {/* Right Column: Full Biography & Credentials */}
@@ -75,7 +77,7 @@ export const StaffModal: React.FC<StaffModalProps> = ({ staff, onClose, onBookWi
                 </p>
               </div>
 
-              {/* Bio Paragraphs */}
+              {/* Bio */}
               <div className="space-y-2 text-xs font-sans text-[#6F5F51] font-light leading-relaxed">
                 <p>{staff.bio}</p>
                 <p>
@@ -97,22 +99,17 @@ export const StaffModal: React.FC<StaffModalProps> = ({ staff, onClose, onBookWi
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 text-[#8C6A43] shrink-0" />
-                    <span>Senior Practitioner at Aurelia Studio since 2018</span>
+                    <span>Senior Practitioner at Aurelia Studio since {staff.sinceYear || '2018'}</span>
                   </li>
                 </ul>
               </div>
 
-              {/* Core Specialties */}
+              {/* Specialties */}
               <div className="space-y-2">
-                <span className="text-[10px] uppercase tracking-widest text-[#8C6A43] font-medium block">
-                  Core Specialties & Services
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {staff.specialties.map((spec, idx) => (
-                    <span
-                      key={idx}
-                      className="bg-[#EFE6DA] text-[#1D1612] text-xs font-sans px-3 py-1 rounded-full border border-[#D8C8B4]"
-                    >
+                <span className="text-[10px] uppercase tracking-widest text-[#6F5F51] font-medium block">Specialties</span>
+                <div className="flex flex-wrap gap-2">
+                  {staff.specialties?.map((spec, i) => (
+                    <span key={i} className="bg-[#EFE6DA] text-[#1D1612] text-xs px-3 py-1 rounded-full border border-[#D8C8B4]">
                       {spec}
                     </span>
                   ))}
@@ -121,18 +118,13 @@ export const StaffModal: React.FC<StaffModalProps> = ({ staff, onClose, onBookWi
 
             </div>
 
-            {/* CTA Button */}
+            {/* Book CTA */}
             <div className="pt-4 border-t border-[#D8C8B4]">
               <button
-                onClick={() => {
-                  onClose();
-                  onBookWithStylist(`Consultation with ${staff.name}`);
-                }}
-                className="w-full bg-[#1D1612] hover:bg-[#8C6A43] text-[#F6F1EA] py-3.5 rounded-full text-xs font-sans uppercase tracking-widest font-medium transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer group"
+                onClick={() => onBookWithStylist(staff.name)}
+                className="w-full bg-[#1D1612] hover:bg-[#8C6A43] text-[#F6F1EA] py-3.5 rounded-[6px] text-xs uppercase tracking-widest font-medium transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer"
               >
-                <Calendar className="w-4 h-4 text-[#D9B98F]" />
-                <span>Book Appointment with {staff.name.split(' ')[0]}</span>
-                <ArrowRight className="w-4 h-4 text-[#D9B98F] group-hover:translate-x-1 transition-transform" />
+                <span>Book Consultation with {staff.name}</span>
               </button>
             </div>
 

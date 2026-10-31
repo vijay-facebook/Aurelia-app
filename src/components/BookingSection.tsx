@@ -1,28 +1,23 @@
 import React, { useState } from 'react';
-import { SERVICES, MENU_ITEMS } from '../data/aureliaData';
-import { MapPin, Phone, Calendar, ArrowRight, CheckCircle2, Clock } from 'lucide-react';
+import { MapPin, Phone, CheckCircle2 } from 'lucide-react';
+import { useConfig } from '../context/ConfigContext';
 
 interface BookingSectionProps {
   preselectedService?: string;
 }
 
 export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedService }) => {
+  const { config } = useConfig();
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
-    service: preselectedService || 'Signature Cut & Finish (₹2,400)',
+    service: preselectedService || config.menu?.items?.[0]?.title || 'Signature Service',
     date: '',
-    timeSlot: '04:30 PM',
+    timeSlot: config.booking.timeSlots?.[0] || '10:30 AM',
     notes: '',
   });
 
   const [submitted, setSubmitted] = useState(false);
-
-  const availableTimeSlots = [
-    { label: 'Morning', slots: ['10:30 AM', '11:30 AM'] },
-    { label: 'Afternoon', slots: ['01:00 PM', '02:30 PM', '04:30 PM'] },
-    { label: 'Evening', slots: ['05:30 PM', '07:00 PM'] },
-  ];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +29,14 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
   };
 
   const whatsappMessage = encodeURIComponent(
-    `Hello Aurelia Studio! I would like to request an appointment:\n\nName: ${formData.fullName}\nPhone: ${formData.phone}\nService: ${formData.service}\nPreferred Date: ${formData.date || 'Soonest Available'}\nTime Slot: ${formData.timeSlot}`
+    config.booking.whatsappTemplate
+      ? config.booking.whatsappTemplate
+          .replace('{service}', formData.service)
+          .replace('{date}', formData.date || 'Soonest Available')
+          .replace('{time}', formData.timeSlot)
+          .replace('{name}', formData.fullName)
+          .replace('{phone}', formData.phone)
+      : `Hello Aurelia Concierge, I would like to book an appointment:\nService: ${formData.service}\nDate: ${formData.date}\nTime: ${formData.timeSlot}\nName: ${formData.fullName}\nPhone: ${formData.phone}`
   );
 
   return (
@@ -49,8 +51,8 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
               Reservations
             </span>
             <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-light leading-tight text-[#F6F1EA]">
-              Your best look <br />
-              <span className="italic font-light text-[#D9B98F]">starts here.</span>
+              {config.headings.bookingTitle.split(' ')[0]} <br />
+              <span className="italic font-light text-[#D9B98F]">{config.headings.bookingTitle.split(' ').slice(1).join(' ')}</span>
             </h2>
           </div>
 
@@ -61,11 +63,11 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
           <div className="space-y-3 pt-4 border-t border-[#F6F1EA]/15 text-xs text-[#E3D7C7]/90 font-light">
             <div className="flex items-center gap-3">
               <MapPin className="w-4 h-4 text-[#D9B98F]" />
-              <span>14 Carter Road, Bandra West, Mumbai 400050</span>
+              <span>{config.businessInfo.addressLines?.join(', ')}, {config.businessInfo.city} {config.businessInfo.pincode}</span>
             </div>
             <div className="flex items-center gap-3">
               <Phone className="w-4 h-4 text-[#D9B98F]" />
-              <span>+91 98200 00000 · WhatsApp Reservations</span>
+              <span>{config.businessInfo.phone} · WhatsApp Reservations</span>
             </div>
           </div>
 
@@ -85,151 +87,97 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
                     Appointment Requested
                   </h3>
                   <p className="text-xs text-[#E3D7C7]/80 max-w-md mx-auto">
-                    Thank you, <span className="font-medium text-[#F6F1EA]">{formData.fullName}</span>. We have logged your request for <span className="text-[#D9B98F] font-medium">{formData.service}</span> on <span className="font-medium text-[#F6F1EA]">{formData.date || 'your preferred date'}</span> at <span className="text-[#D9B98F] font-mono font-medium">{formData.timeSlot}</span>.
+                    {config.booking.successMessage || 'Thank you for your request. We will confirm shortly.'}
                   </p>
                 </div>
 
                 <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
                   <a
-                    href={`https://wa.me/919820000000?text=${whatsappMessage}`}
+                    href={`https://wa.me/${config.booking.whatsappNumber || config.businessInfo.whatsappNumber}?text=${whatsappMessage}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full sm:w-auto bg-[#D9B98F] text-[#1D1612] px-6 py-3 rounded-full text-xs font-medium uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-[#E3D7C7] transition-colors"
                   >
                     <span>Confirm via WhatsApp ↗</span>
                   </a>
-                  <button
-                    onClick={() => setSubmitted(false)}
-                    className="w-full sm:w-auto border border-[#D8C8B4]/40 text-[#F6F1EA] px-6 py-3 rounded-full text-xs uppercase tracking-wider hover:bg-[#F6F1EA]/10 transition-colors"
-                  >
-                    Book Another Service
-                  </button>
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-6 text-xs font-sans">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  
-                  {/* Full Name */}
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-[0.2em] text-[#D9B98F] block font-medium">
+                    <label className="text-[10px] uppercase tracking-widest text-[#D9B98F] font-medium block">
                       Full Name *
                     </label>
                     <input
                       required
                       type="text"
-                      placeholder="e.g. Sanya Malhotra"
+                      placeholder="e.g. Sana Mehta"
                       value={formData.fullName}
                       onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                      className="w-full bg-[#1D1612] text-[#F6F1EA] p-3.5 rounded-[6px] border border-[#D8C8B4]/20 focus:outline-none focus:border-[#D9B98F] placeholder:text-[#F6F1EA]/30"
+                      className="w-full bg-[#15100D] border border-[#3A2F27] text-[#F6F1EA] p-3 rounded-[6px] text-xs focus:outline-none focus:border-[#D9B98F]"
                     />
                   </div>
-
-                  {/* Phone */}
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-[0.2em] text-[#D9B98F] block font-medium">
+                    <label className="text-[10px] uppercase tracking-widest text-[#D9B98F] font-medium block">
                       Phone Number *
                     </label>
                     <input
                       required
                       type="tel"
-                      placeholder="e.g. +91 98200 12345"
+                      placeholder="+91 98200 00000"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full bg-[#1D1612] text-[#F6F1EA] p-3.5 rounded-[6px] border border-[#D8C8B4]/20 focus:outline-none focus:border-[#D9B98F] placeholder:text-[#F6F1EA]/30"
+                      className="w-full bg-[#15100D] border border-[#3A2F27] text-[#F6F1EA] p-3 rounded-[6px] text-xs focus:outline-none focus:border-[#D9B98F]"
                     />
                   </div>
-
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  
-                  {/* Service Dropdown */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-[0.2em] text-[#D9B98F] block font-medium">
-                      Service
-                    </label>
-                    <select
-                      value={formData.service}
-                      onChange={(e) => setFormData({ ...formData, service: e.target.value })}
-                      className="w-full bg-[#1D1612] text-[#F6F1EA] p-3.5 rounded-[6px] border border-[#D8C8B4]/20 focus:outline-none focus:border-[#D9B98F] cursor-pointer"
-                    >
-                      {SERVICES.map((s) => (
-                        <option key={s.id} value={`${s.title} (${s.price})`}>
-                          {s.title} ({s.price})
-                        </option>
-                      ))}
-                      {MENU_ITEMS.map((m) => (
-                        <option key={m.id} value={`${m.title} (${m.price})`}>
-                          {m.title} ({m.price})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-widest text-[#D9B98F] font-medium block">
+                    Preferred Service / Package
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.service}
+                    onChange={(e) => setFormData({ ...formData, service: e.target.value })}
+                    className="w-full bg-[#15100D] border border-[#3A2F27] text-[#F6F1EA] p-3 rounded-[6px] text-xs focus:outline-none focus:border-[#D9B98F]"
+                  />
+                </div>
 
-                  {/* Datepicker */}
+                <div className="grid sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-[0.2em] text-[#D9B98F] block font-medium">
+                    <label className="text-[10px] uppercase tracking-widest text-[#D9B98F] font-medium block">
                       Preferred Date
                     </label>
                     <input
                       type="date"
                       value={formData.date}
                       onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      className="w-full bg-[#1D1612] text-[#F6F1EA] p-3.5 rounded-[6px] border border-[#D8C8B4]/20 focus:outline-none focus:border-[#D9B98F] cursor-pointer"
+                      className="w-full bg-[#15100D] border border-[#3A2F27] text-[#F6F1EA] p-3 rounded-[6px] text-xs focus:outline-none focus:border-[#D9B98F]"
                     />
                   </div>
-
-                </div>
-
-                {/* Interactive Time Slot Selector */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] uppercase tracking-[0.2em] text-[#D9B98F] font-medium flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-[#D9B98F]" />
-                      <span>Select Preferred Time Slot *</span>
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase tracking-widest text-[#D9B98F] font-medium block">
+                      Time Slot
                     </label>
-                    <span className="text-[10px] font-mono text-[#D9B98F]">
-                      Selected: {formData.timeSlot}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 bg-[#1D1612] p-4 rounded-[6px] border border-[#D8C8B4]/20">
-                    {availableTimeSlots.map((group) => (
-                      <div key={group.label} className="space-y-1.5">
-                        <span className="text-[10px] uppercase tracking-wider text-[#E3D7C7]/60 block font-light">
-                          {group.label}
-                        </span>
-                        <div className="flex flex-wrap gap-2">
-                          {group.slots.map((slot) => {
-                            const isSelected = formData.timeSlot === slot;
-                            return (
-                              <button
-                                key={slot}
-                                type="button"
-                                onClick={() => setFormData({ ...formData, timeSlot: slot })}
-                                className={`px-3 py-1.5 rounded-[4px] text-xs font-mono transition-all cursor-pointer ${
-                                  isSelected
-                                    ? 'bg-[#D9B98F] text-[#1D1612] font-semibold shadow-sm ring-1 ring-[#D9B98F]'
-                                    : 'bg-[#2A211B] text-[#E3D7C7] hover:bg-[#382b23] border border-[#D8C8B4]/20'
-                                }`}
-                              >
-                                {slot}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
+                    <select
+                      value={formData.timeSlot}
+                      onChange={(e) => setFormData({ ...formData, timeSlot: e.target.value })}
+                      className="w-full bg-[#15100D] border border-[#3A2F27] text-[#F6F1EA] p-3 rounded-[6px] text-xs focus:outline-none focus:border-[#D9B98F]"
+                    >
+                      {config.booking.timeSlots?.map((slot, idx) => (
+                        <option key={idx} value={slot}>{slot}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-[#D9B98F] hover:bg-[#E3D7C7] text-[#1D1612] py-4 rounded-[6px] text-xs uppercase tracking-[0.25em] font-medium transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer mt-4"
+                  className="w-full bg-[#D9B98F] hover:bg-[#AE9472] text-[#1D1612] py-4 rounded-[6px] text-xs uppercase tracking-widest font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
                 >
                   <span>Request Appointment</span>
-                  <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
             )}

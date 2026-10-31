@@ -1,14 +1,20 @@
 import React, { useState } from 'react';
 import { Tag, Clock, Check, ArrowRight, Sparkles, Copy, Percent } from 'lucide-react';
-import { SESSION_OFFERS, SessionOffer } from '../data/aureliaData';
+import { useConfig } from '../context/ConfigContext';
+import { OfferItemConfig } from '../config/types';
 
 interface OffersSectionProps {
-  onClaimOffer: (offer: SessionOffer) => void;
+  onClaimOffer: (offer: OfferItemConfig) => void;
   onShowToast: (message: string) => void;
 }
 
 export const OffersSection: React.FC<OffersSectionProps> = ({ onClaimOffer, onShowToast }) => {
+  const { config } = useConfig();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  if (!config.sectionsVisibility.offers) return null;
+
+  const activeOffers = config.offers.filter((o) => o.active !== false);
 
   const handleCopyCode = (code: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -26,10 +32,10 @@ export const OffersSection: React.FC<OffersSectionProps> = ({ onClaimOffer, onSh
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
           <div className="max-w-2xl">
             <span className="text-xs uppercase tracking-[0.3em] text-[#8C6A43] font-medium block mb-3">
-              · Curated Session Privileges ·
+              {config.headings.offersEyebrow}
             </span>
             <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-light text-[#1D1612] tracking-tight leading-[1.05]">
-              Exclusive Session Offers & Packages
+              {config.headings.offersTitle}
             </h2>
           </div>
           <div className="flex items-center gap-3 bg-[#EFE6DA] px-5 py-3 rounded-[4px] border border-[#D8C8B4]">
@@ -42,12 +48,11 @@ export const OffersSection: React.FC<OffersSectionProps> = ({ onClaimOffer, onSh
 
         {/* Offers Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {SESSION_OFFERS.map((offer) => (
+          {activeOffers.map((offer) => (
             <div
               key={offer.id}
               className="bg-white border border-[#D8C8B4] rounded-[12px] p-6 lg:p-8 flex flex-col justify-between shadow-sm hover:shadow-xl transition-all duration-300 group hover:-translate-y-1 relative"
             >
-              {/* Top Badge & Discount Tag */}
               <div>
                 <div className="flex items-center justify-between gap-2 mb-6">
                   <span className="text-[11px] uppercase tracking-widest font-semibold text-[#8C6A43] bg-[#F6F1EA] px-3 py-1 rounded-[4px] border border-[#D8C8B4]/80">
@@ -59,7 +64,6 @@ export const OffersSection: React.FC<OffersSectionProps> = ({ onClaimOffer, onSh
                   </span>
                 </div>
 
-                {/* Offer Image */}
                 <div className="relative aspect-[16/9] rounded-[8px] overflow-hidden mb-6 bg-[#1D1612]/5 border border-[#D8C8B4]/40">
                   <img
                     src={offer.image}
@@ -74,7 +78,6 @@ export const OffersSection: React.FC<OffersSectionProps> = ({ onClaimOffer, onSh
                   </div>
                 </div>
 
-                {/* Title & Subtitle */}
                 <span className="text-xs text-[#8C6A43] uppercase tracking-widest font-medium block mb-1">
                   {offer.subtitle}
                 </span>
@@ -85,9 +88,8 @@ export const OffersSection: React.FC<OffersSectionProps> = ({ onClaimOffer, onSh
                   {offer.description}
                 </p>
 
-                {/* Offer Highlights */}
                 <ul className="space-y-2 mb-8 pt-4 border-t border-[#ECE3D6]">
-                  {offer.highlights.map((item, idx) => (
+                  {offer.highlights?.map((item, idx) => (
                     <li key={idx} className="flex items-start gap-2 text-xs text-[#2A211B] font-light">
                       <Check className="w-3.5 h-3.5 text-[#8C6A43] shrink-0 mt-0.5" />
                       <span>{item}</span>
@@ -96,10 +98,7 @@ export const OffersSection: React.FC<OffersSectionProps> = ({ onClaimOffer, onSh
                 </ul>
               </div>
 
-              {/* Bottom Price, Promo Code & Action Button */}
               <div className="pt-6 border-t border-[#D8C8B4] space-y-4">
-                
-                {/* Price Display */}
                 <div className="flex items-baseline justify-between">
                   <div>
                     <span className="text-xs text-[#6C6B6B] line-through mr-2 font-light">
@@ -110,7 +109,6 @@ export const OffersSection: React.FC<OffersSectionProps> = ({ onClaimOffer, onSh
                     </span>
                   </div>
 
-                  {/* Copy Promo Code Pill */}
                   <button
                     onClick={(e) => handleCopyCode(offer.code, e)}
                     className="text-[11px] font-mono uppercase bg-[#F6F1EA] hover:bg-[#EFE6DA] text-[#2A211B] px-3 py-1.5 rounded-[4px] border border-[#D8C8B4] flex items-center gap-1.5 cursor-pointer transition-colors"
@@ -126,7 +124,6 @@ export const OffersSection: React.FC<OffersSectionProps> = ({ onClaimOffer, onSh
                   </button>
                 </div>
 
-                {/* Primary CTA */}
                 <button
                   onClick={() => onClaimOffer(offer)}
                   className="w-full bg-[#1D1612] hover:bg-[#8C6A43] text-[#F6F1EA] py-3 rounded-[4px] text-xs uppercase tracking-widest font-medium transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md group/btn"

@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
-import { Play, X, Eye, Clock, Sparkles, Volume2, VolumeX, RotateCcw } from 'lucide-react';
-import { VIDEO_ITEMS, VideoItem } from '../data/aureliaData';
+import { Play, X, Eye, Clock, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import { useConfig } from '../context/ConfigContext';
+import { VideoItemConfig } from '../config/types';
 
 interface VideoGalleryProps {
   onBookService?: (serviceTitle: string) => void;
 }
 
 export const VideoGallery: React.FC<VideoGalleryProps> = ({ onBookService }) => {
+  const { config } = useConfig();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [activeVideo, setActiveVideo] = useState<VideoItem | null>(null);
+  const [activeVideo, setActiveVideo] = useState<VideoItemConfig | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+
+  if (!config.sectionsVisibility.videos) return null;
 
   const categories = [
     { id: 'all', label: 'All Stories' },
@@ -21,12 +25,11 @@ export const VideoGallery: React.FC<VideoGalleryProps> = ({ onBookService }) => 
 
   const filteredVideos =
     selectedCategory === 'all'
-      ? VIDEO_ITEMS
-      : VIDEO_ITEMS.filter((video) => video.category === selectedCategory);
+      ? config.videos
+      : config.videos.filter((video) => video.category === selectedCategory);
 
   return (
     <section id="videos" className="py-24 lg:py-32 bg-[#1D1612] text-[#F6F1EA] font-sans relative overflow-hidden border-t border-b border-[#32261E]">
-      {/* Decorative background subtle glow */}
       <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-[#D9B98F]/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-[1440px] mx-auto px-6 lg:px-12 relative z-10">
@@ -35,10 +38,10 @@ export const VideoGallery: React.FC<VideoGalleryProps> = ({ onBookService }) => 
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
           <div className="max-w-2xl">
             <span className="text-xs uppercase tracking-[0.3em] text-[#D9B98F] font-medium block mb-4">
-              · Aurelia Motion & Transformations ·
+              {config.headings.videosEyebrow}
             </span>
             <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-light text-[#F6F1EA] tracking-tight leading-[1.05]">
-              Stories in Motion — Before & After
+              {config.headings.videosTitle}
             </h2>
           </div>
           <p className="text-sm lg:text-base text-[#D8C8B4]/80 font-light max-w-md leading-relaxed">
@@ -46,7 +49,7 @@ export const VideoGallery: React.FC<VideoGalleryProps> = ({ onBookService }) => 
           </p>
         </div>
 
-        {/* Filter Tabs - 0-pill discipline (clean border-b links) */}
+        {/* Filter Tabs */}
         <div className="flex items-center gap-6 sm:gap-10 border-b border-[#32261E] pb-4 mb-12 overflow-x-auto no-scrollbar">
           {categories.map((cat) => (
             <button
@@ -74,7 +77,6 @@ export const VideoGallery: React.FC<VideoGalleryProps> = ({ onBookService }) => 
               onClick={() => setActiveVideo(item)}
               className="group cursor-pointer flex flex-col bg-[#261E19] border border-[#3A2F27] hover:border-[#D9B98F]/50 rounded-[6px] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
             >
-              {/* Thumbnail Wrapper */}
               <div className="relative aspect-[16/10] overflow-hidden bg-[#15100D]">
                 <img
                   src={item.thumbnail}
@@ -83,10 +85,8 @@ export const VideoGallery: React.FC<VideoGalleryProps> = ({ onBookService }) => 
                   loading="lazy"
                 />
 
-                {/* Dark Vignette Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#1D1612]/90 via-[#1D1612]/20 to-transparent" />
 
-                {/* Duration & Views Badges */}
                 <div className="absolute top-3 left-3 flex items-center gap-2 text-[10px] uppercase tracking-wider font-medium text-[#F6F1EA] bg-[#1D1612]/80 backdrop-blur-md px-2.5 py-1 rounded-[4px] border border-[#D8C8B4]/20">
                   <Clock className="w-3 h-3 text-[#D9B98F]" />
                   <span>{item.duration}</span>
@@ -97,20 +97,17 @@ export const VideoGallery: React.FC<VideoGalleryProps> = ({ onBookService }) => 
                   <span>{item.views}</span>
                 </div>
 
-                {/* Play Icon Overlay */}
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="w-14 h-14 rounded-full bg-[#D9B98F] text-[#1D1612] flex items-center justify-center group-hover:scale-110 transition-transform shadow-xl">
                     <Play className="w-6 h-6 fill-current ml-0.5" />
                   </div>
                 </div>
 
-                {/* Category tag */}
                 <div className="absolute bottom-3 left-3 text-[11px] uppercase tracking-widest text-[#D9B98F] font-medium">
                   · {item.categoryLabel}
                 </div>
               </div>
 
-              {/* Video Info Content */}
               <div className="p-6 flex-1 flex flex-col justify-between">
                 <div>
                   <h3 className="font-serif text-xl font-light text-[#F6F1EA] group-hover:text-[#D9B98F] transition-colors leading-snug mb-2">
@@ -138,7 +135,6 @@ export const VideoGallery: React.FC<VideoGalleryProps> = ({ onBookService }) => 
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 lg:p-10 animate-fade-in">
           <div className="relative w-full max-w-4xl bg-[#1D1612] border border-[#D8C8B4]/30 rounded-[8px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             
-            {/* Modal Header */}
             <div className="p-4 sm:p-6 border-b border-[#3A2F27] flex items-center justify-between bg-[#15100D]">
               <div>
                 <span className="text-[10px] uppercase tracking-[0.25em] text-[#D9B98F] font-medium block">
@@ -156,34 +152,44 @@ export const VideoGallery: React.FC<VideoGalleryProps> = ({ onBookService }) => 
               </button>
             </div>
 
-            {/* Video Player Container */}
             <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
-              <video
-                src={activeVideo.videoUrl}
-                poster={activeVideo.thumbnail}
-                controls
-                autoPlay
-                muted={isMuted}
-                className="w-full h-full object-contain"
-              >
-                Your browser does not support video playback.
-              </video>
+              {activeVideo.videoType === 'embed' ? (
+                <iframe
+                  src={activeVideo.videoUrl}
+                  title={activeVideo.title}
+                  className="w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <video
+                  src={activeVideo.videoUrl}
+                  poster={activeVideo.thumbnail}
+                  controls
+                  autoPlay
+                  muted={isMuted}
+                  className="w-full h-full object-contain"
+                >
+                  Your browser does not support video playback.
+                </video>
+              )}
             </div>
 
-            {/* Modal Footer & Actions */}
             <div className="p-4 sm:p-6 bg-[#15100D] border-t border-[#3A2F27] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <p className="text-xs text-[#D8C8B4]/80 font-light max-w-xl">
                 {activeVideo.description}
               </p>
 
               <div className="flex items-center gap-3 shrink-0">
-                <button
-                  onClick={() => setIsMuted(!isMuted)}
-                  className="px-3 py-2 bg-[#261E19] hover:bg-[#3A2F27] text-[#F6F1EA] rounded-[4px] text-xs flex items-center gap-2 border border-[#3A2F27] transition-colors cursor-pointer"
-                >
-                  {isMuted ? <VolumeX className="w-4 h-4 text-[#D9B98F]" /> : <Volume2 className="w-4 h-4 text-[#D9B98F]" />}
-                  <span>{isMuted ? 'Unmute' : 'Mute'}</span>
-                </button>
+                {activeVideo.videoType !== 'embed' && (
+                  <button
+                    onClick={() => setIsMuted(!isMuted)}
+                    className="px-3 py-2 bg-[#261E19] hover:bg-[#3A2F27] text-[#F6F1EA] rounded-[4px] text-xs flex items-center gap-2 border border-[#3A2F27] transition-colors cursor-pointer"
+                  >
+                    {isMuted ? <VolumeX className="w-4 h-4 text-[#D9B98F]" /> : <Volume2 className="w-4 h-4 text-[#D9B98F]" />}
+                    <span>{isMuted ? 'Unmute' : 'Mute'}</span>
+                  </button>
+                )}
 
                 {onBookService && (
                   <button

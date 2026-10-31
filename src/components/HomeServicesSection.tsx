@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Home, MapPin, Clock, Check, Sparkles, ArrowRight, ShieldCheck } from 'lucide-react';
-import { HOME_SERVICES, HomeService } from '../data/aureliaData';
+import { Home, MapPin, Clock, Check, ArrowRight, ShieldCheck } from 'lucide-react';
+import { useConfig } from '../context/ConfigContext';
 
 interface HomeServicesSectionProps {
   onBookHomeService: (serviceTitle: string) => void;
@@ -8,9 +8,12 @@ interface HomeServicesSectionProps {
 }
 
 export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBookHomeService, onShowToast }) => {
+  const { config } = useConfig();
   const [locationPin, setLocationPin] = useState('');
   const [isCheckingPincode, setIsCheckingPincode] = useState(false);
   const [pincodeResult, setPincodeResult] = useState<{ available: boolean; message: string } | null>(null);
+
+  if (!config.sectionsVisibility.homeServices) return null;
 
   const handleCheckPincode = (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,21 +25,20 @@ export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBook
     setTimeout(() => {
       setIsCheckingPincode(false);
       const clean = locationPin.trim().toLowerCase();
-      // Simulate Mumbai areas or numeric pincodes
-      const supportedAreas = ['bandra', 'juhu', 'khar', 'worli', 'colaba', 'lower parel', 'powai', 'malabar hill', '400050', '400049', '400018', '400005', '400026'];
+      const supportedAreas = config.businessInfo.atHomeServedAreas?.map(a => a.toLowerCase()) || ['bandra', 'juhu', 'khar', 'worli', 'colaba'];
       
-      const isAvailable = supportedAreas.some((area) => clean.includes(area));
+      const isAvailable = supportedAreas.some((area) => clean.includes(area) || area.includes(clean));
 
       if (isAvailable || clean.length >= 6) {
         setPincodeResult({
           available: true,
-          message: `Great news! Aurelia At-Home service is available in your area (${locationPin.toUpperCase()}). Senior artists can be dispatched.`,
+          message: `Great news! At-Home service is available in your area (${locationPin.toUpperCase()}). Senior artists can be dispatched.`,
         });
         onShowToast('At-Home service available in your area!');
       } else {
         setPincodeResult({
           available: false,
-          message: `We currently service select Mumbai locations (Bandra, Juhu, Worli, Colaba, etc.). Contact concierge for special requests.`,
+          message: `We currently service select locations (${config.businessInfo.atHomeServedAreas?.join(', ') || 'Mumbai'}). Contact concierge for special requests.`,
         });
       }
     }, 600);
@@ -44,7 +46,6 @@ export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBook
 
   return (
     <section id="home-services" className="py-24 lg:py-32 bg-[#1D1612] text-[#F6F1EA] font-sans relative overflow-hidden border-t border-[#3A2F27]">
-      {/* Decorative ambient background glow */}
       <div className="absolute top-1/3 right-0 w-[500px] h-[500px] bg-[#D9B98F]/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-[1440px] mx-auto px-6 lg:px-12 relative z-10">
@@ -53,10 +54,10 @@ export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBook
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
           <div className="max-w-2xl">
             <span className="text-xs uppercase tracking-[0.3em] text-[#D9B98F] font-medium block mb-3">
-              · Sanctuary at Your Doorstep ·
+              {config.headings.homeServicesEyebrow}
             </span>
             <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-light text-[#F6F1EA] tracking-tight leading-[1.05]">
-              Aurelia At-Home Salon & Spa
+              {config.headings.homeServicesTitle}
             </h2>
           </div>
           <p className="text-sm lg:text-base text-[#D8C8B4]/80 font-light max-w-md leading-relaxed">
@@ -72,10 +73,10 @@ export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBook
             </div>
             <div>
               <h3 className="font-serif text-xl font-light text-[#F6F1EA] mb-1">
-                Check At-Home Availability in Mumbai
+                Check At-Home Availability
               </h3>
               <p className="text-xs text-[#D8C8B4]/70 font-light">
-                Enter your area name or pincode (e.g., Bandra West, Juhu, 400050) to verify stylist dispatch.
+                Enter your area name or pincode to verify stylist dispatch.
               </p>
             </div>
           </div>
@@ -99,7 +100,6 @@ export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBook
           </form>
         </div>
 
-        {/* Availability Result Banner */}
         {pincodeResult && (
           <div className={`p-5 rounded-[8px] mb-12 flex items-center gap-3 text-xs sm:text-sm animate-fade-in ${
             pincodeResult.available 
@@ -113,13 +113,12 @@ export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBook
 
         {/* Home Services Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {HOME_SERVICES.map((service) => (
+          {config.homeServices.map((service) => (
             <div
               key={service.id}
               className="bg-[#261E19] border border-[#3A2F27] hover:border-[#D9B98F]/50 rounded-[8px] overflow-hidden flex flex-col justify-between group transition-all duration-300 hover:-translate-y-1 shadow-lg"
             >
               <div>
-                {/* Image Box */}
                 <div className="relative aspect-[16/10] overflow-hidden bg-[#15100D]">
                   <img
                     src={service.image}
@@ -129,7 +128,6 @@ export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBook
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#1D1612] via-transparent to-transparent" />
                   
-                  {/* Duration Tag */}
                   <div className="absolute top-3 left-3 flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-medium text-[#F6F1EA] bg-[#1D1612]/85 backdrop-blur-md px-2.5 py-1 rounded-[4px] border border-[#D8C8B4]/20">
                     <Clock className="w-3 h-3 text-[#D9B98F]" />
                     <span>{service.duration}</span>
@@ -140,7 +138,6 @@ export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBook
                   </div>
                 </div>
 
-                {/* Content Box */}
                 <div className="p-6">
                   <span className="text-[10px] uppercase tracking-[0.2em] text-[#D9B98F] font-medium block mb-1">
                     {service.subtitle}
@@ -152,9 +149,8 @@ export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBook
                     {service.description}
                   </p>
 
-                  {/* Includes List */}
                   <ul className="space-y-2 mb-6 pt-4 border-t border-[#3A2F27]">
-                    {service.includes.map((inc, i) => (
+                    {service.includes?.map((inc, i) => (
                       <li key={i} className="flex items-start gap-2 text-[11px] text-[#D8C8B4] font-light">
                         <Check className="w-3.5 h-3.5 text-[#D9B98F] shrink-0 mt-0.5" />
                         <span>{inc}</span>
@@ -164,7 +160,6 @@ export const HomeServicesSection: React.FC<HomeServicesSectionProps> = ({ onBook
                 </div>
               </div>
 
-              {/* Footer Price & Booking CTA */}
               <div className="p-6 pt-0">
                 <div className="pt-4 border-t border-[#3A2F27] flex items-center justify-between mb-4">
                   <span className="text-[10px] uppercase tracking-wider text-[#D8C8B4]/60">At-Home Fee</span>

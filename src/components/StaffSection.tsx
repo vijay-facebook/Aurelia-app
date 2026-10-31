@@ -1,14 +1,20 @@
 import React, { useState } from 'react';
-import { STAFF_MEMBERS, StaffMember } from '../data/aureliaData';
+import { StaffMemberConfig } from '../config/types';
+import { useConfig } from '../context/ConfigContext';
 import { StaffModal } from './StaffModal';
-import { Calendar, Clock, Instagram, Award, ArrowRight, Info, ExternalLink } from 'lucide-react';
+import { Clock, Instagram, Award, ArrowRight, ExternalLink } from 'lucide-react';
 
 interface StaffSectionProps {
   onBookWithStylist: (stylistName: string) => void;
 }
 
 export const StaffSection: React.FC<StaffSectionProps> = ({ onBookWithStylist }) => {
-  const [selectedStaffForModal, setSelectedStaffForModal] = useState<StaffMember | null>(null);
+  const { config } = useConfig();
+  const [selectedStaffForModal, setSelectedStaffForModal] = useState<StaffMemberConfig | null>(null);
+
+  if (!config.sectionsVisibility.team) return null;
+
+  const staffMembers = config.staff.filter((s) => s.show !== false);
 
   return (
     <section id="team" className="py-24 lg:py-32 max-w-[1440px] mx-auto px-6 lg:px-12 border-t border-[#D8C8B4]/60 font-sans">
@@ -17,10 +23,10 @@ export const StaffSection: React.FC<StaffSectionProps> = ({ onBookWithStylist })
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 mb-16">
         <div>
           <span className="text-[11px] font-sans tracking-[0.3em] uppercase text-[#8C6A43] font-medium block mb-3">
-            Our Senior Artists
+            {config.headings.teamEyebrow}
           </span>
           <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-light text-[#1D1612]">
-            Meet the <span className="italic text-[#8C6A43]">Master Artists.</span>
+            {config.headings.teamTitle}
           </h2>
         </div>
 
@@ -29,15 +35,15 @@ export const StaffSection: React.FC<StaffSectionProps> = ({ onBookWithStylist })
         </p>
       </div>
 
-      {/* Staff Grid (4 Artists) */}
+      {/* Staff Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        {STAFF_MEMBERS.map((staff) => (
+        {staffMembers.map((staff) => (
           <div
             key={staff.id}
             className="group bg-[#EFE6DA]/60 hover:bg-[#EFE6DA] rounded-[12px] border border-[#D8C8B4]/70 hover:border-[#8C6A43] transition-all duration-300 p-5 flex flex-col justify-between shadow-sm hover:shadow-md"
           >
             <div>
-              {/* Photo with Availability Badge & Quick About Trigger */}
+              {/* Photo */}
               <div
                 className="relative aspect-[3/4] rounded-[8px] overflow-hidden mb-5 bg-[#E3D7C7] cursor-pointer"
                 onClick={() => setSelectedStaffForModal(staff)}
@@ -46,7 +52,7 @@ export const StaffSection: React.FC<StaffSectionProps> = ({ onBookWithStylist })
                   src={staff.image}
                   alt={staff.name}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  referrerPolicy="no-referrer"
+                  loading="lazy"
                 />
 
                 {/* Availability Pill */}
@@ -67,7 +73,6 @@ export const StaffSection: React.FC<StaffSectionProps> = ({ onBookWithStylist })
                     <span>{staff.experience}</span>
                   </span>
 
-                  {/* About Link / Button */}
                   <button
                     onClick={() => setSelectedStaffForModal(staff)}
                     className="text-[10px] font-sans uppercase tracking-wider text-[#1D1612] hover:text-[#8C6A43] underline font-medium flex items-center gap-1 transition-colors cursor-pointer"
@@ -94,7 +99,7 @@ export const StaffSection: React.FC<StaffSectionProps> = ({ onBookWithStylist })
 
                 {/* Specialties Pills */}
                 <div className="flex flex-wrap gap-1.5 pt-2">
-                  {staff.specialties.map((spec, idx) => (
+                  {staff.specialties?.map((spec, idx) => (
                     <span
                       key={idx}
                       className="bg-[#F6F1EA] text-[#1D1612] text-[10px] font-sans px-2.5 py-1 rounded-full border border-[#D8C8B4]/60"
@@ -106,7 +111,7 @@ export const StaffSection: React.FC<StaffSectionProps> = ({ onBookWithStylist })
               </div>
             </div>
 
-            {/* Actions Row: About Modal + Book CTA */}
+            {/* Actions */}
             <div className="pt-6 space-y-2">
               <button
                 onClick={() => onBookWithStylist(staff.name)}
@@ -115,25 +120,19 @@ export const StaffSection: React.FC<StaffSectionProps> = ({ onBookWithStylist })
                 <span>Book with {staff.name.split(' ')[0]}</span>
                 <ArrowRight className="w-3.5 h-3.5 text-[#D9B98F] group-hover/btn:translate-x-1 transition-transform" />
               </button>
-
-              <button
-                onClick={() => setSelectedStaffForModal(staff)}
-                className="w-full text-[11px] font-sans uppercase tracking-wider text-[#6F5F51] hover:text-[#1D1612] py-1.5 transition-colors cursor-pointer flex items-center justify-center gap-1"
-              >
-                <Info className="w-3.5 h-3.5 text-[#8C6A43]" />
-                <span>View Full Biography & Credentials</span>
-              </button>
             </div>
 
           </div>
         ))}
       </div>
 
-      {/* Staff Biography Modal */}
       <StaffModal
         staff={selectedStaffForModal}
         onClose={() => setSelectedStaffForModal(null)}
-        onBookWithStylist={onBookWithStylist}
+        onBookWithStylist={(stylistName) => {
+          setSelectedStaffForModal(null);
+          onBookWithStylist(stylistName);
+        }}
       />
 
     </section>

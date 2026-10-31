@@ -1,19 +1,25 @@
 import React, { useState } from 'react';
-import { REVIEWS } from '../data/aureliaData';
+import { useConfig } from '../context/ConfigContext';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 
 export const KindWords: React.FC = () => {
+  const { config } = useConfig();
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  if (!config.sectionsVisibility.reviews) return null;
+
+  const reviews = config.reviews?.length > 0 ? config.reviews : [];
+  if (reviews.length === 0) return null;
+
   const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % REVIEWS.length);
+    setCurrentIndex((prev) => (prev + 1) % reviews.length);
   };
 
   const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + REVIEWS.length) % REVIEWS.length);
+    setCurrentIndex((prev) => (prev - 1 + reviews.length) % reviews.length);
   };
 
-  const currentReview = REVIEWS[currentIndex];
+  const currentReview = reviews[currentIndex] || reviews[0];
 
   return (
     <section id="reviews" className="py-24 lg:py-32 max-w-[1440px] mx-auto px-6 lg:px-12 text-center font-sans">
@@ -21,7 +27,7 @@ export const KindWords: React.FC = () => {
       <div className="max-w-3xl mx-auto space-y-8">
         
         <span className="text-[11px] font-sans tracking-[0.3em] uppercase text-[#8C6A43] font-medium block">
-          Kind Words
+          {config.headings.reviewsEyebrow}
         </span>
 
         {/* Decorative Quote Mark */}
@@ -52,7 +58,7 @@ export const KindWords: React.FC = () => {
 
           {/* Dots */}
           <div className="flex items-center gap-2">
-            {REVIEWS.map((_, idx) => (
+            {reviews.map((_, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentIndex(idx)}
