@@ -4,9 +4,11 @@ import { defaultConfig } from '../config/defaultConfig';
 import { 
   LayoutDashboard, Globe, Megaphone, Compass, Sparkles, UserCheck, 
   Menu as MenuIcon, Image as ImageIcon, Video, Tag, Home, MessageSquare, 
-  Share2, Calendar, Eye, Settings, Shield, LogOut, Save, RotateCcw, Download, Upload, Plus, Trash2, Check, AlertCircle 
+  Share2, Calendar, Eye, Settings, Shield, LogOut, Save, RotateCcw, Download, Upload, Plus, Trash2, Check, AlertCircle,
+  MapPin, Clock, ToggleRight, Rocket
   } from 'lucide-react';
 import { AdminErrorLogger } from '../components/AdminErrorLogger';
+import { ExtraEditors } from './ExtraEditors';
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -14,7 +16,7 @@ interface AdminDashboardProps {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [config, setConfig] = useState<SiteConfig>(defaultConfig);
-  const [activeTab, setActiveTab] = useState<string>('brand');
+  const [activeTab, setActiveTab] = useState<string>('quickstart');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -145,12 +147,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     setHasUnsavedChanges(true);
   };
 
+  // Same as updateNested, but applies several changes from one copy of the config.
+  const updateMany = (changes: Record<string, any>) => {
+    const updated = JSON.parse(JSON.stringify(config));
+    Object.entries(changes).forEach(([path, value]) => {
+      const keys = path.split('.');
+      let current = updated;
+      for (let i = 0; i < keys.length - 1; i++) {
+        current = current[keys[i]];
+      }
+      current[keys[keys.length - 1]] = value;
+    });
+    setConfig(updated);
+    setHasUnsavedChanges(true);
+  };
+
   const tabs = [
+    { id: 'quickstart', label: 'Quick Setup (Start Here)', icon: Rocket },
     { id: 'brand', label: 'Brand & Identity', icon: Globe },
     { id: 'announcement', label: 'Announcement Bar', icon: Megaphone },
     { id: 'navigation', label: 'Navigation & Order', icon: Compass },
     { id: 'hero', label: 'Hero Section', icon: Sparkles },
-    { id: 'business', label: 'Business Info & Hours', icon: Settings },
+    { id: 'business', label: 'Contact Details', icon: Settings },
+    { id: 'location', label: 'Address & Map', icon: MapPin },
+    { id: 'hours', label: 'Opening Hours', icon: Clock },
     { id: 'services', label: 'Services Grid', icon: LayoutDashboard },
     { id: 'story', label: 'Story / About', icon: UserCheck },
     { id: 'staff', label: 'Master Artists', icon: UserCheck },
@@ -162,6 +182,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     { id: 'reviews', label: 'Reviews & Kind Words', icon: MessageSquare },
     { id: 'social', label: 'Social & Feed', icon: Share2 },
     { id: 'booking', label: 'Booking & WhatsApp', icon: Calendar },
+    { id: 'sections', label: 'Sections & Headings', icon: ToggleRight },
     { id: 'seo', label: 'SEO & Metadata', icon: Globe },
   ];
 
@@ -1015,6 +1036,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 </div>
               </div>
             )}
+
+            {/* Address, hours, story, menu, gallery, videos, at-home, reviews, social, booking, sections */}
+            <ExtraEditors
+              tab={activeTab}
+              config={config}
+              update={updateNested}
+              updateMany={updateMany}
+              upload={handleFileUpload}
+              uploading={uploading}
+            />
 
             {/* SEO & METADATA */}
             {activeTab === 'seo' && (

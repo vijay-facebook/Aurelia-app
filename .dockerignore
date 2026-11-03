@@ -1,0 +1,8 @@
+node_modules
+dist
+server.js
+data
+public/uploads
+.git
+.env
+*.log

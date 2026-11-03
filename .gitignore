@@ -1,8 +1,13 @@
 node_modules/
 build/
 dist/
+server.js
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
+
+# Client content: never commit a customer's saved site data or uploads to the template repo
+data/
+public/uploads/

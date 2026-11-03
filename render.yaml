@@ -1,0 +1,24 @@
+# One-click deploy on Render (https://render.com): New > Blueprint > pick this repo.
+# NOTE: a persistent disk needs a paid Render instance. Without a disk, content and
+# uploaded files are erased on every redeploy.
+services:
+  - type: web
+    name: salon-website
+    runtime: node
+    plan: starter
+    # --include=dev is required because Render sets NODE_ENV=production, which would skip the build tools.
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false # you will be asked to type this in the Render dashboard
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATA_DIR
+        value: /var/data/site
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
+    disk:
+      name: salon-data
+      mountPath: /var/data
+      sizeGB: 2
