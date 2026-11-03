@@ -13,7 +13,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, pre
   
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [service, setService] = useState(preselectedTitle || config?.menu?.items?.[0]?.title || 'Signature Service');
+  const [service, setService] = useState<string[]>(preselectedTitle ? [preselectedTitle] : (config?.menu?.items?.[0]?.title ? [`${config.menu.items[0].title} (${config.menu.items[0].price})`] : ['Signature Service']));
   const [date, setDate] = useState('');
   const [timeSlot, setTimeSlot] = useState(config?.booking?.timeSlots?.[0] || '10:30 AM');
   const [submitted, setSubmitted] = useState(false);
@@ -22,19 +22,19 @@ export const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, pre
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !phone) return;
+    if (!fullName || !phone || service.length === 0) return;
     setSubmitted(true);
   };
 
   const whatsappMsg = encodeURIComponent(
     config.booking.whatsappTemplate
       ? config.booking.whatsappTemplate
-          .replace('{service}', service)
+          .replace('{service}', service.join(', '))
           .replace('{date}', date || 'Today')
           .replace('{time}', timeSlot)
           .replace('{name}', fullName)
           .replace('{phone}', phone)
-      : `Hello ${config.brand.name} Studio! Requesting appointment:\nName: ${fullName}\nPhone: ${phone}\nService: ${service}\nDate: ${date || 'Today'}\nTime Slot: ${timeSlot}`
+      : `Hello ${config.brand.name} Studio! Requesting appointment:\nName: ${fullName}\nPhone: ${phone}\nServices: ${service.join(', ')}\nDate: ${date || 'Today'}\nTime Slot: ${timeSlot}`
   );
 
   return (
@@ -113,13 +113,17 @@ export const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, pre
 
               <div className="space-y-1">
                 <label className="text-[10px] uppercase tracking-wider text-[#8C6A43] font-medium block">
-                  Service / Package
+                  Service / Package (Select multiple)
                 </label>
                 <select
+                  multiple
                   required
                   value={service}
-                  onChange={(e) => setService(e.target.value)}
-                  className="w-full bg-[#EFE6DA] text-[#1D1612] p-3 rounded-[6px] border border-[#D8C8B4] focus:outline-none focus:border-[#8C6A43]"
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.selectedOptions, option => option.value);
+                    setService(selected);
+                  }}
+                  className="w-full bg-[#EFE6DA] text-[#1D1612] p-3 rounded-[6px] border border-[#D8C8B4] focus:outline-none focus:border-[#8C6A43] h-32"
                 >
                   {config?.menu?.categories?.map((cat) => (
                     <optgroup key={cat} label={cat}>
