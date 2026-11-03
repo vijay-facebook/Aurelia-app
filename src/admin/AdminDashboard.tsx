@@ -5,7 +5,8 @@ import {
   LayoutDashboard, Globe, Megaphone, Compass, Sparkles, UserCheck, 
   Menu as MenuIcon, Image as ImageIcon, Video, Tag, Home, MessageSquare, 
   Share2, Calendar, Eye, Settings, Shield, LogOut, Save, RotateCcw, Download, Upload, Plus, Trash2, Check, AlertCircle 
-} from 'lucide-react';
+  } from 'lucide-react';
+import { AdminErrorLogger } from '../components/AdminErrorLogger';
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -176,12 +177,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       )}
 
       {/* Error Notification */}
-      {errorMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#da3633] text-white px-5 py-3 rounded-lg shadow-2xl text-xs flex items-center gap-2 animate-bounce">
-          <AlertCircle className="w-4 h-4" />
-          <span>{errorMessage}</span>
-        </div>
-      )}
+      <AdminErrorLogger message={errorMessage} onClose={() => setErrorMessage(null)} />
 
       {/* Top Admin Header */}
       <header className="h-16 bg-[#161B22] border-b border-[#30363D] px-6 flex items-center justify-between shrink-0 sticky top-0 z-45">

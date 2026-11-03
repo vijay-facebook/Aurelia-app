@@ -115,12 +115,35 @@ export const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, pre
                 <label className="text-[10px] uppercase tracking-wider text-[#8C6A43] font-medium block">
                   Service / Package
                 </label>
-                <input
-                  type="text"
+                <select
+                  required
                   value={service}
                   onChange={(e) => setService(e.target.value)}
                   className="w-full bg-[#EFE6DA] text-[#1D1612] p-3 rounded-[6px] border border-[#D8C8B4] focus:outline-none focus:border-[#8C6A43]"
-                />
+                >
+                  {config?.menu?.categories?.map((cat) => (
+                    <optgroup key={cat} label={cat}>
+                      {config.menu.items
+                        .filter((item) => item.category === cat)
+                        .map((item) => (
+                          <option key={item.id} value={`${item.title} (${item.price})`}>
+                            {item.title} - {item.price}
+                          </option>
+                        ))}
+                    </optgroup>
+                  ))}
+                  {/* Uncategorized items */}
+                  {config?.menu?.items
+                    ?.filter((item) => !config?.menu?.categories?.includes(item.category))
+                    .map((item) => (
+                      <option key={item.id} value={`${item.title} (${item.price})`}>
+                        {item.title} - {item.price}
+                      </option>
+                    ))}
+                  {(!config?.menu?.items || config.menu.items.length === 0) && (
+                    <option value="Signature Service">Signature Service</option>
+                  )}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
