@@ -11,7 +11,8 @@ interface ConfigContextType {
   resetConfig: () => Promise<boolean>;
 }
 
-const ConfigContext = createContext<ConfigContextType>({
+export type { ConfigContextType };
+export const ConfigContext = createContext<ConfigContextType>({
   config: defaultConfig,
   loading: true,
   error: null,
@@ -32,7 +33,7 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const salon = params.get('salon');
       const url = salon ? `/api/config?salon=${salon}` : '/api/config';
       
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to load configuration');
       const data = await res.json();
       if (data && typeof data === 'object') {

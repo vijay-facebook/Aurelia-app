@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { setToken } from './api';
 import { Lock, ArrowRight, ShieldAlert } from 'lucide-react';
 
 interface AdminLoginProps {
@@ -25,6 +26,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
       if (!res.ok) {
         throw new Error(data.error || 'Authentication failed');
       }
+      setToken(data.token || '');
       onLoginSuccess();
     } catch (err: any) {
       setError(err.message || 'Incorrect password');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { ConfigProvider } from './context/ConfigContext';
 import { Header } from './components/Header';
@@ -22,6 +22,7 @@ import { Footer } from './components/Footer';
 import { ServiceItemConfig, MenuItemConfig, OfferItemConfig } from './config/types';
 import { Calendar, Check, Shield } from 'lucide-react';
 import { AdminLogin } from './admin/AdminLogin';
+import { adminFetch, setToken } from './admin/api';
 import { AdminDashboard } from './admin/AdminDashboard';
 import { PreviewShell } from './components/PreviewShell';
 
@@ -200,12 +201,33 @@ function PublicWebsite() {
 
 function AdminRoute() {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+  const [checking, setChecking] = useState<boolean>(true);
+
+  // Keep the admin logged in across page refreshes while the login is still valid.
+  useEffect(() => {
+    adminFetch('/api/admin/session')
+      .then((res) => setIsAdminAuthenticated(res.ok))
+      .catch(() => setIsAdminAuthenticated(false))
+      .finally(() => setChecking(false));
+  }, []);
+
+  if (checking) {
+    return <div className="min-h-screen bg-[#0F1117] flex items-center justify-center text-xs text-[#8B949E]">Loading…</div>;
+  }
 
   if (!isAdminAuthenticated) {
     return <AdminLogin onLoginSuccess={() => setIsAdminAuthenticated(true)} />;
   }
 
-  return <AdminDashboard onLogout={() => setIsAdminAuthenticated(false)} />;
+  return (
+    <AdminDashboard
+      onLogout={() => {
+        setToken('');
+        adminFetch('/api/admin/logout', { method: 'POST' }).catch(() => {});
+        setIsAdminAuthenticated(false);
+      }}
+    />
+  );
 }
 
 export default function App() {

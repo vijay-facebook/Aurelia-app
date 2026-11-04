@@ -1,14 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SiteConfig, ServiceItemConfig, StaffMemberConfig, MenuItemConfig, GalleryImageConfig, VideoItemConfig, OfferItemConfig, HomeServiceConfig, ReviewItemConfig, SocialPostConfig } from '../config/types';
 import { defaultConfig } from '../config/defaultConfig';
 import { 
   LayoutDashboard, Globe, Megaphone, Compass, Sparkles, UserCheck, 
   Menu as MenuIcon, Image as ImageIcon, Video, Tag, Home, MessageSquare, 
   Share2, Calendar, Eye, Settings, Shield, LogOut, Save, RotateCcw, Download, Upload, Plus, Trash2, Check, AlertCircle,
-  MapPin, Clock, ToggleRight, Rocket
+  MapPin, Clock, ToggleRight, Rocket, Monitor, Smartphone, RefreshCw, X, ExternalLink
   } from 'lucide-react';
 import { AdminErrorLogger } from '../components/AdminErrorLogger';
 import { ExtraEditors } from './ExtraEditors';
+import { adminFetch } from './api';
+
+const DRAFT_KEY = 'salon_draft_config';
+
+// Which part of the live site to scroll to when an admin tab is opened.
+const PREVIEW_TARGETS: Record<string, string> = {
+  quickstart: 'top', brand: 'top', announcement: 'top', navigation: 'top', sections: 'top', seo: 'top',
+  hero: 'hero', business: 'footer', location: 'footer', hours: 'footer',
+  services: 'services', story: 'about', staff: 'team', menu: 'menu', gallery: 'gallery',
+  videos: 'videos', offers: 'offers', homeServices: 'home-services', reviews: 'reviews',
+  social: 'social', booking: 'reservations',
+};
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -21,47 +33,104 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState<boolean>(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<SiteConfig | null>(null);
+
+  // Live preview pane
+  const [previewOpen, setPreviewOpen] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth >= 1280);
+  const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
+  const [previewReady, setPreviewReady] = useState(false);
+  const [frameKey, setFrameKey] = useState(0);
+  const [paneSize, setPaneSize] = useState({ w: 0, h: 0 });
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const configRef = useRef<SiteConfig>(config);
+  const activeTabRef = useRef<string>(activeTab);
+  const dirtyRef = useRef(false);
+  configRef.current = config;
+  activeTabRef.current = activeTab;
+
+  const postToPreview = (message: Record<string, unknown>) => {
+    iframeRef.current?.contentWindow?.postMessage(message, window.location.origin);
+  };
+
+  // 1. Load the PUBLISHED content from the server (never silently replaced by an old browser draft).
+  const loadConfig = () => {
+    setLoadError(null);
+    fetch('/api/config', { cache: 'no-store' })
+      .then((res) => {
+        if (!res.ok) throw new Error('Could not load your website content.');
+        return res.json();
+      })
+      .then((data: SiteConfig) => {
+        setConfig(data);
+        setLoaded(true);
+        try {
+          const raw = localStorage.getItem(DRAFT_KEY);
+          if (raw) {
+            const draft = JSON.parse(raw);
+            if (JSON.stringify(draft) !== JSON.stringify(data)) setPendingDraft(draft);
+            else localStorage.removeItem(DRAFT_KEY);
+          }
+        } catch {
+          /* ignore broken draft */
+        }
+      })
+      .catch((err) => setLoadError(err?.message || 'Could not load your website content.'));
+  };
 
   useEffect(() => {
-    const saved = localStorage.getItem('salon_draft_config');
-    if (saved) {
-      setConfig(JSON.parse(saved));
-    } else {
-      fetch('/api/config')
-        .then((res) => res.json())
-        .then((data) => {
-          if (data) setConfig(data);
-        })
-        .catch((err) => console.error('Failed to load admin config', err));
-    }
+    loadConfig();
   }, []);
 
+  // 2. Every edit: keep a crash-recovery draft and push the change into the live preview.
   useEffect(() => {
-    // Autosave to localStorage
-    if (config !== defaultConfig) {
-      localStorage.setItem('salon_draft_config', JSON.stringify(config));
-      setHasUnsavedChanges(true);
-    }
-
-    // Debounced preview update
-    const timer = setTimeout(() => {
-      const iframe = document.getElementById('preview-iframe') as HTMLIFrameElement;
-      if (iframe?.contentWindow) {
-        iframe.contentWindow.postMessage({ type: 'CONFIG_UPDATE', config }, '*');
+    if (dirtyRef.current) {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(config));
+      } catch {
+        /* storage full / blocked */
       }
-    }, 150);
+    }
+    const timer = setTimeout(() => postToPreview({ type: 'CONFIG_UPDATE', config }), 80);
     return () => clearTimeout(timer);
   }, [config]);
 
+  // 3. The preview frame says "ready" when it has loaded: send it the current draft right away.
   useEffect(() => {
-    const iframe = document.getElementById('preview-iframe') as HTMLIFrameElement;
-    if (iframe?.contentWindow) {
-      iframe.contentWindow.postMessage({ type: 'FOCUS_SECTION', sectionId: activeTab }, '*');
-    }
-  }, [activeTab]);
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === 'PREVIEW_READY') {
+        setPreviewReady(true);
+        postToPreview({ type: 'CONFIG_UPDATE', config: configRef.current });
+        postToPreview({ type: 'SCROLL_TO', target: PREVIEW_TARGETS[activeTabRef.current] || 'top' });
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
 
+  // 4. Opening another editor tab scrolls the preview to that part of the website.
+  useEffect(() => {
+    if (previewReady) postToPreview({ type: 'SCROLL_TO', target: PREVIEW_TARGETS[activeTab] || 'top' });
+  }, [activeTab, previewReady]);
+
+  // 5. Size the preview so the website renders at its real desktop (or phone) width, scaled to fit.
+  useEffect(() => {
+    const el = paneRef.current;
+    if (!el) return;
+    const measure = () => setPaneSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [previewOpen]);
+
+  const frameWidth = device === 'mobile' ? 390 : 1280;
+  const scale = paneSize.w ? Math.min(1, (paneSize.w - 24) / frameWidth) : 1;
+  const frameHeight = Math.max(200, paneSize.h - 24);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -76,15 +145,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/config', {
+      const res = await adminFetch('/api/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
-        credentials: 'include',
       });
-      if (!res.ok) throw new Error('Failed to save config');
+      if (res.status === 401) {
+        showError('Your login expired. Your edits are kept - please log in again and press Save.');
+        setTimeout(onLogout, 2500);
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to save changes');
+      }
       const updated = await res.json();
       setConfig(updated);
+      dirtyRef.current = false;
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       setHasUnsavedChanges(false);
       showToast('Changes saved & published successfully!');
     } catch (err: any) {
@@ -97,10 +175,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const handleReset = async () => {
     if (!confirm('Are you sure you want to reset all content to default template?')) return;
     try {
-      const res = await fetch('/api/config/reset', { method: 'POST', credentials: 'include' });
+      const res = await adminFetch('/api/config/reset', { method: 'POST' });
       if (!res.ok) throw new Error('Reset failed');
       const data = await res.json();
       setConfig(data);
+      dirtyRef.current = false;
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       setHasUnsavedChanges(false);
       showToast('Reset to default template successfully.');
     } catch (err: any) {
@@ -117,10 +197,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/upload', {
+      const res = await adminFetch('/api/upload', {
         method: 'POST',
         body: formData,
-        credentials: 'include',
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
@@ -143,6 +222,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       current = current[keys[i]];
     }
     current[keys[keys.length - 1]] = value;
+    dirtyRef.current = true;
     setConfig(updated);
     setHasUnsavedChanges(true);
   };
@@ -158,6 +238,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       }
       current[keys[keys.length - 1]] = value;
     });
+    dirtyRef.current = true;
     setConfig(updated);
     setHasUnsavedChanges(true);
   };
@@ -214,11 +295,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setPreviewMode(true)}
+            onClick={() => setPreviewOpen((v) => !v)}
             className="px-3 py-1.5 bg-[#21262D] hover:bg-[#30363D] text-[#58A6FF] rounded-lg text-xs font-medium border border-[#30363D] flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Eye className="w-3.5 h-3.5" />
-            <span>Live Preview</span>
+            <span>{previewOpen ? 'Hide Preview' : 'Show Preview'}</span>
           </button>
 
           <a
@@ -241,7 +322,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !loaded}
             className="px-4 py-1.5 bg-[#238636] hover:bg-[#2ea043] text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all shadow-md cursor-pointer disabled:opacity-50"
           >
             <Save className="w-3.5 h-3.5" />
@@ -262,7 +343,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       <div className="flex-1 flex overflow-hidden">
         
         {/* Left Sidebar */}
-        <aside className="w-72 bg-[#161B22] border-r border-[#30363D] overflow-y-auto p-4 space-y-1.5 shrink-0">
+        <aside className="w-60 bg-[#161B22] border-r border-[#30363D] overflow-y-auto p-4 space-y-1.5 shrink-0">
           <div className="text-[10px] uppercase tracking-wider text-[#8B949E] font-semibold px-3 py-2">
             CMS Sections
           </div>
@@ -287,8 +368,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         </aside>
 
         {/* Content Area */}
-        <main className="flex-1 overflow-y-auto p-8 lg:p-12 bg-[#0D1117]">
-          <div className="max-w-4xl mx-auto space-y-8">
+        <main className="flex-1 min-w-0 overflow-y-auto p-5 xl:p-8 bg-[#0D1117]">
+          <div className="max-w-3xl mx-auto space-y-6">
+
+            {loadError && (
+              <div className="bg-red-500/10 border border-red-500/40 text-red-300 rounded-lg p-4 text-xs flex items-center justify-between gap-4">
+                <span>{loadError} Saving is disabled until the content loads.</span>
+                <button onClick={loadConfig} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs">Retry</button>
+              </div>
+            )}
+
+            {pendingDraft && (
+              <div className="bg-amber-500/10 border border-amber-500/40 text-amber-200 rounded-lg p-4 text-xs flex flex-wrap items-center justify-between gap-3">
+                <span>You have unsaved edits from an earlier session. Restore them?</span>
+                <span className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      dirtyRef.current = true;
+                      setConfig(pendingDraft);
+                      setHasUnsavedChanges(true);
+                      setPendingDraft(null);
+                    }}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs"
+                  >
+                    Restore my edits
+                  </button>
+                  <button
+                    onClick={() => {
+                      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+                      setPendingDraft(null);
+                    }}
+                    className="px-3 py-1.5 bg-[#21262D] hover:bg-[#30363D] text-[#C9D1D9] rounded text-xs border border-[#30363D]"
+                  >
+                    Discard
+                  </button>
+                </span>
+              </div>
+            )}
             
             {/* BRAND & IDENTITY */}
             {activeTab === 'brand' && (
@@ -1080,58 +1196,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </div>
         </main>
 
-      </div>
-
-      {/* Live Preview Modal */}
-      {previewMode && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col">
-          <div className="bg-[#161B22] border-b border-[#30363D] px-6 py-4 flex items-center justify-between text-white shrink-0">
-            <div className="flex items-center gap-3">
-              <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-              <div>
-                <h3 className="text-sm font-semibold">Live Preview Mode — {config.brand.name}</h3>
-                <p className="text-[10px] text-[#8B949E]">Showing active configuration draft. Click 'Save & Publish' to persist.</p>
+        {/* Live Preview pane: shows the website exactly as it will look, updating while you type */}
+        {previewOpen && (
+          <section className="fixed inset-0 z-50 xl:static xl:z-auto flex flex-col bg-[#0D1117] border-l border-[#30363D] xl:w-[46%] xl:max-w-[820px] xl:min-w-[420px] shrink-0">
+            <div className="h-12 px-4 bg-[#161B22] border-b border-[#30363D] flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`w-2.5 h-2.5 rounded-full ${previewReady ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                <span className="text-xs font-semibold text-[#F2F4F8]">Live Preview</span>
+                <span className="text-[10px] text-[#8B949E] hidden sm:inline truncate">
+                  {previewReady ? 'Updates as you type' : 'Loading…'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setDevice('desktop')}
+                  title="Desktop view"
+                  className={`p-1.5 rounded border text-xs ${device === 'desktop' ? 'bg-[#1F6FEB]/20 border-[#1F6FEB]/50 text-[#58A6FF]' : 'bg-[#21262D] border-[#30363D] text-[#8B949E] hover:text-white'}`}
+                >
+                  <Monitor className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setDevice('mobile')}
+                  title="Mobile view"
+                  className={`p-1.5 rounded border text-xs ${device === 'mobile' ? 'bg-[#1F6FEB]/20 border-[#1F6FEB]/50 text-[#58A6FF]' : 'bg-[#21262D] border-[#30363D] text-[#8B949E] hover:text-white'}`}
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => { setPreviewReady(false); setFrameKey((k) => k + 1); }}
+                  title="Reload preview"
+                  className="p-1.5 rounded border bg-[#21262D] border-[#30363D] text-[#8B949E] hover:text-white"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <a
+                  href="/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open the published website in a new tab"
+                  className="p-1.5 rounded border bg-[#21262D] border-[#30363D] text-[#8B949E] hover:text-white"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  onClick={() => setPreviewOpen(false)}
+                  title="Close preview"
+                  className="p-1.5 rounded border bg-[#21262D] border-[#30363D] text-[#8B949E] hover:text-white xl:hidden"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  const iframe = document.getElementById('preview-iframe') as HTMLIFrameElement;
-                  iframe.contentWindow?.postMessage({ type: 'SET_MODE', mode: 'focus' }, '*');
-                }}
-                className="px-3 py-1.5 bg-[#21262D] hover:bg-[#30363D] text-xs rounded-lg border border-[#30363D]"
-              >
-                Focus Section
-              </button>
-              <button
-                onClick={() => {
-                  const iframe = document.getElementById('preview-iframe') as HTMLIFrameElement;
-                  iframe.contentWindow?.postMessage({ type: 'SET_MODE', mode: 'full' }, '*');
-                }}
-                className="px-3 py-1.5 bg-[#21262D] hover:bg-[#30363D] text-xs rounded-lg border border-[#30363D]"
-              >
-                View Full Website
-              </button>
-              <button
-                onClick={() => setPreviewMode(false)}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium cursor-pointer"
-              >
-                Exit Preview
-              </button>
+
+            <div ref={paneRef} className="flex-1 min-h-0 bg-[#21262D] p-3 overflow-hidden">
+              <div className="mx-auto" style={{ width: frameWidth * scale, height: frameHeight }}>
+                <iframe
+                  key={frameKey}
+                  ref={iframeRef}
+                  src="/preview"
+                  title="Live website preview"
+                  className="bg-white border-0 rounded-md shadow-2xl"
+                  style={{
+                    width: frameWidth,
+                    height: frameHeight / scale,
+                    transform: `scale(${scale})`,
+                    transformOrigin: 'top left',
+                  }}
+                />
+              </div>
             </div>
-          </div>
-          <iframe
-            id="preview-iframe"
-            src={`/preview?v=${Date.now()}`}
-            className="flex-1 w-full border-none bg-white"
-            onLoad={() => {
-              const iframe = document.getElementById('preview-iframe') as HTMLIFrameElement;
-              iframe.contentWindow?.postMessage({ type: 'CONFIG_UPDATE', config }, '*');
-              iframe.contentWindow?.postMessage({ type: 'FOCUS_SECTION', sectionId: activeTab }, '*');
-            }}
-          />
-        </div>
-      )}
+
+            <div className="px-4 py-2 bg-[#161B22] border-t border-[#30363D] text-[10px] shrink-0 flex items-center justify-between gap-2">
+              <span className={hasUnsavedChanges ? 'text-amber-400' : 'text-emerald-400'}>
+                {hasUnsavedChanges ? '● Draft - not published yet' : '● Matches the published website'}
+              </span>
+              <span className="text-[#8B949E]">Press Save &amp; Publish to go live</span>
+            </div>
+          </section>
+        )}
+
+      </div>
+
     </div>
   );
 };

@@ -161,25 +161,29 @@ app.use(express.static(path.resolve(process.cwd(), 'public'))); // For demo asse
 /* ---------------- admin auth ---------------- */
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-const sessions = new Map<string, number>(); // token -> expiry timestamp
+
+// Stateless signed login token ("<expiry>.<signature>"). Unlike an in-memory list, it survives server
+// restarts / redeploys, so the admin never gets silently logged out while editing.
+const signToken = (expires: number) =>
+  `${expires}.${crypto.createHmac('sha256', SESSION_SECRET).update(String(expires)).digest('hex')}`;
 
 const isValidSession = (token?: string) => {
-  if (!token) return false;
-  const expires = sessions.get(token);
-  if (!expires) return false;
-  if (expires < Date.now()) {
-    sessions.delete(token);
-    return false;
-  }
-  return true;
+  if (!token || typeof token !== 'string') return false;
+  const [payload, sig] = token.split('.');
+  if (!payload || !sig) return false;
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+  if (sig.length !== expected.length) return false;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
+  return Number(payload) > Date.now();
 };
 
 const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const token = req.cookies?.aurelia_admin_token || req.headers['authorization']?.toString().replace('Bearer ', '');
+  const bearer = req.headers['authorization']?.toString().replace('Bearer ', '');
+  const token = bearer || req.cookies?.aurelia_admin_token;
   if (isValidSession(token)) {
     return next();
   }
-  return res.status(401).json({ error: 'Unauthorized. Admin login required.' });
+  return res.status(401).json({ error: 'Session expired. Please log in again.' });
 };
 
 const safeEqual = (a: string, b: string) => {
@@ -225,6 +229,7 @@ const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSiz
 
 // 1. Get Config (Public)
 app.get('/api/config', (req, res) => {
+  res.set('Cache-Control', 'no-store'); // visitors must always get the latest published content
   try {
     const requested = req.query.salon;
     const configFile = requested ? getConfigPath(requested) : CONFIG_FILE;
@@ -286,12 +291,11 @@ app.post('/api/admin/login', (req, res) => {
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   if (password && safeEqual(password, ADMIN_PASSWORD)) {
     loginFails.delete(ip);
-    const token = crypto.randomBytes(32).toString('hex');
-    sessions.set(token, now + SESSION_TTL_MS);
+    const token = signToken(now + SESSION_TTL_MS);
     res.cookie('aurelia_admin_token', token, {
       httpOnly: true,
       secure: IS_PROD,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: SESSION_TTL_MS,
     });
     return res.json({ success: true, token });
@@ -301,12 +305,13 @@ app.post('/api/admin/login', (req, res) => {
   return res.status(401).json({ error: 'Incorrect admin password' });
 });
 
+// 3b. Is the current admin login still valid? (used on page refresh)
+app.get('/api/admin/session', requireAdmin, (_req, res) => {
+  res.json({ ok: true });
+});
+
 // 4. Admin Logout
 app.post('/api/admin/logout', (req, res) => {
-  const token = req.cookies?.aurelia_admin_token;
-  if (token) {
-    sessions.delete(token);
-  }
   res.clearCookie('aurelia_admin_token');
   res.json({ success: true });
 });

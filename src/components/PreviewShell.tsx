@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { useConfig } from '../context/ConfigContext';
+import React, { useEffect, useRef, useState } from 'react';
+import { ConfigContext, useConfig } from '../context/ConfigContext';
+import { SiteConfig } from '../config/types';
 import { Hero } from './Hero';
+import { MarqueeTicker } from './MarqueeTicker';
 import { ServicesGrid } from './ServicesGrid';
 import { StorySection } from './StorySection';
 import { StaffSection } from './StaffSection';
@@ -15,65 +17,103 @@ import { BookingSection } from './BookingSection';
 import { Header } from './Header';
 import { Footer } from './Footer';
 
+const noop = () => {};
+
+/**
+ * The page shown inside the admin's live-preview frame.
+ *
+ * It renders the SAME sections, in the SAME order, as the public website, but with the admin's
+ * unsaved draft as the configuration - so every keystroke in the editor appears here instantly.
+ */
 export const PreviewShell: React.FC = () => {
-  const { config: liveConfig } = useConfig();
-  const [draftConfig, setDraftConfig] = useState(liveConfig);
-  const [mode, setMode] = useState<'focus' | 'full'>('focus');
-  const [focusedSection, setFocusedSection] = useState<string>('hero');
+  const base = useConfig();
+  const [draft, setDraft] = useState<SiteConfig | null>(null);
+  const highlightTimer = useRef<number | undefined>(undefined);
+
+  // Until the editor sends its draft we show the saved site.
+  const config = draft ?? base.config;
 
   useEffect(() => {
+    const scrollToTarget = (target: string) => {
+      const el =
+        target === 'top'
+          ? null
+          : target === 'footer'
+            ? document.querySelector('footer')
+            : document.getElementById(target);
+
+      if (!el) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // Brief outline so the editor can see which part they are editing.
+      document.querySelectorAll('[data-preview-focus]').forEach((n) => {
+        (n as HTMLElement).style.outline = '';
+        n.removeAttribute('data-preview-focus');
+      });
+      (el as HTMLElement).setAttribute('data-preview-focus', '1');
+      (el as HTMLElement).style.outline = '3px solid #D9B98F';
+      (el as HTMLElement).style.outlineOffset = '-3px';
+      window.clearTimeout(highlightTimer.current);
+      highlightTimer.current = window.setTimeout(() => {
+        (el as HTMLElement).style.outline = '';
+        el.removeAttribute('data-preview-focus');
+      }, 1600);
+    };
+
     const handleMessage = (event: MessageEvent) => {
-      if (event.data.type === 'CONFIG_UPDATE') {
-        setDraftConfig(event.data.config);
-      } else if (event.data.type === 'SET_MODE') {
-        setMode(event.data.mode);
-      } else if (event.data.type === 'FOCUS_SECTION') {
-        setFocusedSection(event.data.sectionId);
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'CONFIG_UPDATE' && data.config) {
+        setDraft(data.config as SiteConfig);
+      } else if (data.type === 'SCROLL_TO' && typeof data.target === 'string') {
+        scrollToTarget(data.target);
       }
     };
+
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    // Tell the editor we are ready, so it sends the current draft (avoids a load-order race).
+    window.parent?.postMessage({ type: 'PREVIEW_READY' }, window.location.origin);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.clearTimeout(highlightTimer.current);
+    };
   }, []);
 
-  const renderSection = (id: string) => {
-    switch (id) {
-      case 'hero': return <Hero onOpenBooking={() => {}} onExploreServices={() => {}} />;
-      case 'services': return <ServicesGrid onSelectService={() => {}} />;
-      case 'about': return <StorySection />;
-      case 'team': return <StaffSection onBookWithStylist={() => {}} />;
-      case 'menu': return <MenuSection onBookItem={() => {}} />;
-      case 'gallery': return <GallerySection />;
-      case 'videos': return <VideoGallery onBookService={() => {}} />;
-      case 'offers': return <OffersSection onClaimOffer={() => {}} onShowToast={() => {}} />;
-      case 'home-services': return <HomeServicesSection onBookHomeService={() => {}} onShowToast={() => {}} />;
-      case 'reviews': return <KindWords />;
-      case 'social': return <SocialMediaSection onShowToast={() => {}} />;
-      case 'booking': return <BookingSection />;
-      default: return null;
-    }
+  // Links inside the preview must not navigate the frame away.
+  const blockNavigation = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('a[href]')) e.preventDefault();
   };
 
   return (
-    <div className="bg-[#F6F1EA] text-[#1D1612] font-sans min-h-screen">
-      {mode === 'full' ? (
-        <div className="space-y-0">
-          <Header onOpenBooking={() => {}} onNavigate={() => {}} activeSection="" />
-          <div className="space-y-12 py-12">
-            {draftConfig.navigation.filter(n => n.show).map(n => (
-              <div key={n.id} id={n.id} data-cms-section={n.id}>
-                {renderSection(n.id)}
-              </div>
-            ))}
-          </div>
-          <Footer />
-        </div>
-      ) : (
-        <div className="p-12 flex items-center justify-center min-h-screen">
-          <div data-cms-section={focusedSection}>
-            {renderSection(focusedSection)}
-          </div>
-        </div>
-      )}
-    </div>
+    <ConfigContext.Provider value={{ ...base, config }}>
+      <div
+        onClickCapture={blockNavigation}
+        className="min-h-screen bg-[#F6F1EA] text-[#1D1612] font-sans antialiased flex flex-col justify-between"
+      >
+        <Header onOpenBooking={noop} onNavigate={noop} activeSection="" />
+
+        <main className="flex-1">
+          <Hero onOpenBooking={noop} onExploreServices={noop} />
+          <MarqueeTicker />
+          <ServicesGrid onSelectService={noop} />
+          <StorySection />
+          <StaffSection onBookWithStylist={noop} />
+          <MenuSection onBookItem={noop} />
+          <GallerySection />
+          <VideoGallery onBookService={noop} />
+          <OffersSection onClaimOffer={noop} onShowToast={noop} />
+          <HomeServicesSection onBookHomeService={noop} onShowToast={noop} />
+          <KindWords />
+          <SocialMediaSection onShowToast={noop} />
+          <BookingSection />
+        </main>
+
+        <Footer />
+      </div>
+    </ConfigContext.Provider>
   );
 };
