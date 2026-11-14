@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { MarqueeTicker } from './components/MarqueeTicker';
 import { ServicesGrid } from './components/ServicesGrid';
+import { RecommendedForYou } from './components/RecommendedForYou';
 import { StorySection } from './components/StorySection';
 import { StaffSection } from './components/StaffSection';
 import { MenuSection } from './components/MenuSection';
@@ -17,6 +18,7 @@ import { SocialMediaSection } from './components/SocialMediaSection';
 import { WishlistSection } from './components/WishlistSection';
 import { BookingSection } from './components/BookingSection';
 import { BookingModal } from './components/BookingModal';
+import { GoogleMeetConsultation } from './components/GoogleMeetConsultation';
 import { Footer } from './components/Footer';
 
 import { ServiceItemConfig, MenuItemConfig, OfferItemConfig } from './config/types';
@@ -122,6 +124,12 @@ function PublicWebsite() {
           }
         />
 
+        <RecommendedForYou
+          onSelectService={(serviceLabel: string) =>
+            handleOpenBookingWithService(serviceLabel)
+          }
+        />
+
         <StorySection />
 
         <StaffSection
@@ -169,6 +177,8 @@ function PublicWebsite() {
           }
           onExploreServices={() => handleNavigate('services')}
         />
+
+        <GoogleMeetConsultation />
 
         <BookingSection preselectedService={selectedServiceTitle} />
       </main>

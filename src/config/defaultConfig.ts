@@ -591,6 +591,10 @@ export const defaultConfig: SiteConfig = {
     upiId: 'aurelia.studio@okaxis',
     payeeName: 'Aurelia Luxury Beauty & Wellness Studio',
     paymentNote: 'Scan with any UPI app (GPay, PhonePe, Paytm) for contactless booking deposit or checkout.',
+    loyaltyEnabled: true,
+    pointsPerAppointment: 100,
+    rewardThresholdPoints: 500,
+    rewardLabel: 'Complimentary Aurelia Blowout or 20% Off Next Ritual',
   },
   sectionsVisibility: {
     services: true,

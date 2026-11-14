@@ -4,6 +4,7 @@ import { SiteConfig } from '../config/types';
 import { Hero } from './Hero';
 import { MarqueeTicker } from './MarqueeTicker';
 import { ServicesGrid } from './ServicesGrid';
+import { RecommendedForYou } from './RecommendedForYou';
 import { StorySection } from './StorySection';
 import { StaffSection } from './StaffSection';
 import { MenuSection } from './MenuSection';
@@ -13,6 +14,7 @@ import { OffersSection } from './OffersSection';
 import { HomeServicesSection } from './HomeServicesSection';
 import { KindWords } from './KindWords';
 import { SocialMediaSection } from './SocialMediaSection';
+import { GoogleMeetConsultation } from './GoogleMeetConsultation';
 import { BookingSection } from './BookingSection';
 import { Header } from './Header';
 import { Footer } from './Footer';
@@ -100,6 +102,7 @@ export const PreviewShell: React.FC = () => {
           <Hero onOpenBooking={noop} onExploreServices={noop} />
           <MarqueeTicker />
           <ServicesGrid onSelectService={noop} />
+          <RecommendedForYou onSelectService={noop} disableAutoFetch />
           <StorySection />
           <StaffSection onBookWithStylist={noop} />
           <MenuSection onBookItem={noop} />
@@ -109,6 +112,7 @@ export const PreviewShell: React.FC = () => {
           <HomeServicesSection onBookHomeService={noop} onShowToast={noop} />
           <KindWords />
           <SocialMediaSection onShowToast={noop} />
+          <GoogleMeetConsultation />
           <BookingSection />
         </main>
 

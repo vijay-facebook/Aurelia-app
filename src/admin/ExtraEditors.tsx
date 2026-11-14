@@ -949,6 +949,35 @@ export const ExtraEditors: React.FC<ExtraEditorsProps> = ({ tab, config, update,
               hint="Shown beneath the shop payment QR code after a booking is confirmed."
             />
           </Panel>
+
+          <Panel
+            title="Loyalty Points Program"
+            subtitle="Reward repeat guests with points per completed appointment towards discounts or complimentary services."
+          >
+            <ToggleField
+              label="Show Loyalty Points tracker in customer booking flow"
+              checked={b.loyaltyEnabled !== false}
+              onChange={(v) => update('booking.loyaltyEnabled', v)}
+            />
+            <div className="grid sm:grid-cols-2 gap-4">
+              <NumberField
+                label="Points Earned per Appointment"
+                value={b.pointsPerAppointment ?? 100}
+                onChange={(v) => update('booking.pointsPerAppointment', Math.max(10, v))}
+              />
+              <NumberField
+                label="Points Required for Reward"
+                value={b.rewardThresholdPoints ?? 500}
+                onChange={(v) => update('booking.rewardThresholdPoints', Math.max(50, v))}
+              />
+            </div>
+            <TextField
+              label="Reward Description"
+              value={b.rewardLabel || ''}
+              onChange={(v) => update('booking.rewardLabel', v)}
+              placeholder="e.g. Complimentary Blowout or 20% Off Next Ritual"
+            />
+          </Panel>
         </div>
       );
     }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Video, ExternalLink, X, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useConfig } from '../context/ConfigContext';
 import {
   BookingPaymentQR,
@@ -8,6 +8,13 @@ import {
   calculateEstimatedBookingTotal,
   createBookingReference,
 } from './BookingPaymentQR';
+import {
+  BookingHistoryEntry,
+  HISTORY_UPDATED_EVENT,
+  loadBookingHistory,
+  recordBookingHistory,
+} from '../utils/bookingHistory';
+import { LoyaltyPointsTracker } from './LoyaltyPointsTracker';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -27,12 +34,25 @@ export const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, pre
   const [bookingRef, setBookingRef] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('deposit');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending');
+  const [appliedRewardLabel, setAppliedRewardLabel] = useState<string | null>(null);
+  const [meetAppointments, setMeetAppointments] = useState<BookingHistoryEntry[]>(() =>
+    loadBookingHistory().filter((item) => Boolean(item.meetUrl))
+  );
+
+  useEffect(() => {
+    const sync = () => {
+      setMeetAppointments(loadBookingHistory().filter((item) => Boolean(item.meetUrl)));
+    };
+    window.addEventListener(HISTORY_UPDATED_EVENT, sync);
+    return () => window.removeEventListener(HISTORY_UPDATED_EVENT, sync);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
     setSubmitted(false);
     setPaymentMode('deposit');
     setPaymentStatus('pending');
+    setAppliedRewardLabel(null);
     if (preselectedTitle) {
       setService([preselectedTitle]);
     } else if (config?.menu?.items?.[0]?.title) {
@@ -57,9 +77,17 @@ export const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, pre
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName || !phone || service.length === 0) return;
-    setBookingRef(createBookingReference(config.brand.name));
+    const generatedRef = createBookingReference(config.brand.name);
+    setBookingRef(generatedRef);
     setPaymentMode(estimatedTotal > 0 ? 'deposit' : 'open');
     setPaymentStatus('pending');
+    recordBookingHistory({
+      services: service,
+      date,
+      timeSlot,
+      customerName: fullName.trim(),
+      bookingRef: generatedRef,
+    });
     setSubmitted(true);
   };
 
@@ -82,7 +110,11 @@ export const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, pre
       }`
     : '';
 
-  const whatsappMsg = encodeURIComponent(`${baseWhatsappText}${paymentSummarySuffix}`);
+  const rewardSuffix = appliedRewardLabel
+    ? `\nLoyalty Reward Redeemed: ${appliedRewardLabel}`
+    : '';
+
+  const whatsappMsg = encodeURIComponent(`${baseWhatsappText}${paymentSummarySuffix}${rewardSuffix}`);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1D1612]/70 backdrop-blur-md animate-fade-in font-sans">
@@ -109,6 +141,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, pre
                 {config.booking.successMessage || 'We will confirm your appointment shortly.'}
               </p>
             </div>
+
+            <LoyaltyPointsTracker
+              variant="light"
+              justEarnedPoints={config.booking.pointsPerAppointment ?? 100}
+              rewardApplied={Boolean(appliedRewardLabel)}
+              onApplyReward={(label) => setAppliedRewardLabel(label)}
+            />
 
             <BookingPaymentQR
               customerName={fullName}
@@ -141,6 +180,18 @@ export const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, pre
                 Done
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                setTimeout(() => {
+                  document.getElementById('virtual-consultations')?.scrollIntoView({ behavior: 'smooth' });
+                }, 120);
+              }}
+              className="text-[11px] uppercase tracking-wider text-[#8C6A43] hover:text-[#1D1612] underline underline-offset-4 cursor-pointer"
+            >
+              Need a pre-visit video chat? Host Virtual Consultation via Google Meet
+            </button>
           </div>
         ) : (
           <div className="space-y-6">
@@ -152,6 +203,47 @@ export const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, pre
                 Book <span className="italic text-[#8C6A43]">{config.brand.name} Studio</span>
               </h3>
             </div>
+
+            <LoyaltyPointsTracker
+              variant="light"
+              rewardApplied={Boolean(appliedRewardLabel)}
+              onApplyReward={(label) => setAppliedRewardLabel(label)}
+            />
+
+            {meetAppointments.length > 0 && (
+              <div className="bg-[#EFE6DA] border border-[#D8C8B4] rounded-[10px] p-3.5 space-y-2 text-xs">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[#8C6A43] font-semibold">
+                  <Video className="w-3.5 h-3.5" />
+                  <span>Scheduled Google Meet Consultations</span>
+                </div>
+                <div className="space-y-1.5">
+                  {meetAppointments.slice(0, 3).map((appt) => (
+                    <div
+                      key={appt.id}
+                      className="flex items-center justify-between gap-2 bg-[#F6F1EA] border border-[#D8C8B4]/70 rounded-[6px] px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-[#1D1612] truncate">
+                          {appt.customerName || appt.bookingRef || 'Consultation'} · {appt.services.join(', ')}
+                        </p>
+                        <p className="text-[10px] text-[#6F5F51] font-mono tabular-nums">
+                          {[appt.date || 'Upcoming', appt.timeSlot].filter(Boolean).join(' • ')}
+                        </p>
+                      </div>
+                      <a
+                        href={appt.meetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 bg-[#1D1612] hover:bg-[#8C6A43] text-[#F6F1EA] px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-medium shrink-0"
+                      >
+                        <span>Join</span>
+                        <ExternalLink className="w-3 h-3 text-[#D9B98F]" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">

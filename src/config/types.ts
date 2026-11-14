@@ -230,6 +230,10 @@ export interface SiteConfig {
     upiId?: string;
     payeeName?: string;
     paymentNote?: string;
+    loyaltyEnabled?: boolean;
+    pointsPerAppointment?: number;
+    rewardThresholdPoints?: number;
+    rewardLabel?: string;
   };
   sectionsVisibility: {
     services: boolean;

@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import multer from 'multer';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import { defaultConfig } from './src/config/defaultConfig';
 
 dotenv.config();
@@ -370,6 +371,279 @@ app.post('/api/config/import', requireAdmin, importUpload.single('config'), (req
     res.json({ success: true, config: merged });
   } catch (err: any) {
     res.status(400).json({ error: 'Invalid JSON configuration file' });
+  }
+});
+
+// 9. AI-Powered Personalized Service Recommendations (Server-Side Gemini API)
+app.post('/api/recommendations', async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({
+        error: 'Gemini API key is not configured on the server.',
+      });
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    const activeConfig = fs.existsSync(CONFIG_FILE)
+      ? readConfigFile(CONFIG_FILE)
+      : defaultConfig;
+
+    const bookingHistory = Array.isArray(req.body?.bookingHistory)
+      ? req.body.bookingHistory.slice(0, 10)
+      : [];
+    const preferences = isPlainObject(req.body?.preferences)
+      ? req.body.preferences
+      : {};
+
+    // Build unified catalog from services & curated menu items
+    const catalog = [
+      ...(activeConfig.services || []).map((s) => ({
+        id: s.id,
+        title: s.title,
+        category: s.category,
+        price: s.price,
+        numericPrice: s.numericPrice,
+        description: s.extendedDescription || s.subtitle,
+        image: s.image,
+      })),
+      ...(activeConfig.menu?.items || []).map((m) => ({
+        id: m.id,
+        title: m.title,
+        category: m.category,
+        price: m.price,
+        numericPrice: m.numericPrice,
+        description: `${m.description} (${m.duration})`,
+        duration: m.duration,
+      })),
+    ];
+
+    const catalogSummary = catalog
+      .map(
+        (item) =>
+          `- id="${item.id}" | title="${item.title}" | category="${item.category}" | price="${item.price}" | notes="${item.description}"`
+      )
+      .join('\n');
+
+    const prompt = [
+      `You are the senior beauty and grooming concierge at ${activeConfig.brand.name} (${activeConfig.brand.tagline}).`,
+      `Recommend exactly 3 distinct services from the studio's catalog below based on the guest's booking history and stated preferences.`,
+      ``,
+      `RULES:`,
+      `1. You MUST pick serviceId and serviceTitle strictly matching items in the provided catalog.`,
+      `2. Return exactly 3 varied, complementary recommendations (avoid duplicates of the exact same treatment unless it is a natural maintenance cadence).`,
+      `3. Write warm, editorial, specific explanations connecting each choice to the guest's history or preferences.`,
+      `4. Do not invent percentages, match scores, or fake promotional discounts.`,
+      ``,
+      `GUEST BOOKING HISTORY:`,
+      bookingHistory.length > 0 ? JSON.stringify(bookingHistory) : 'No prior logged appointments yet (first-time visitor).',
+      ``,
+      `GUEST PREFERENCES:`,
+      JSON.stringify(preferences),
+      ``,
+      `AVAILABLE STUDIO CATALOG:`,
+      catalogSummary,
+    ].join('\n');
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-4-hydrogen',
+      contents: prompt,
+      config: {
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            curatorNote: {
+              type: Type.STRING,
+              description: 'A brief 1-sentence personalized salon concierge summary for this guest.',
+            },
+            recommendations: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  serviceId: { type: Type.STRING },
+                  serviceTitle: { type: Type.STRING },
+                  personalizedReason: {
+                    type: Type.STRING,
+                    description: '1-2 sentences explaining why this fits their history and preferences.',
+                  },
+                  pairingTip: {
+                    type: Type.STRING,
+                    description: 'Concise timing or pairing guidance (under 10 words).',
+                  },
+                },
+                required: ['serviceId', 'serviceTitle', 'personalizedReason', 'pairingTip'],
+              },
+            },
+          },
+          required: ['curatorNote', 'recommendations'],
+        },
+      },
+    });
+
+    const rawText = (response.text ?? '{}').trim();
+    const parsed = JSON.parse(rawText);
+    const items = Array.isArray(parsed.recommendations) ? parsed.recommendations : [];
+
+    // Enrich strictly against catalog records so images/prices/categories stay authoritative
+    const enriched = items
+      .map((rec: any) => {
+        const match =
+          catalog.find((c) => c.id === rec.serviceId) ||
+          catalog.find((c) => c.title.toLowerCase() === String(rec.serviceTitle || '').toLowerCase());
+        if (!match) return null;
+
+        const categoryImage =
+          (activeConfig.services || []).find(
+            (s) => s.category.toLowerCase() === String(match.category).toLowerCase()
+          )?.image ||
+          activeConfig.services?.[0]?.image ||
+          activeConfig.hero.heroImage;
+
+        return {
+          serviceId: match.id,
+          title: match.title,
+          category: match.category,
+          price: match.price,
+          numericPrice: match.numericPrice,
+          duration: 'duration' in match ? match.duration : undefined,
+          image: ('image' in match && match.image) ? match.image : categoryImage,
+          personalizedReason: String(rec.personalizedReason || match.description || ''),
+          pairingTip: String(rec.pairingTip || 'Tailored studio session'),
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+
+    return res.json({
+      curatorNote:
+        typeof parsed.curatorNote === 'string' && parsed.curatorNote
+          ? parsed.curatorNote
+          : `Curated selections from ${activeConfig.brand.name} Studio.`,
+      recommendations: enriched,
+    });
+  } catch (err: any) {
+    console.error('Recommendation generation error:', err);
+    const status = typeof err?.status === 'number' && err.status >= 400 ? err.status : 500;
+    return res.status(status).json({
+      error: err?.message || 'Unable to generate personalized recommendations right now.',
+    });
+  }
+});
+
+// 10. Google Meet REST API Proxy Routes (validates Bearer OAuth access token from Firebase client)
+const requireGoogleBearerToken = (req: express.Request, res: express.Response): string | null => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.length < 15) {
+    res.status(401).json({ error: 'Missing Google OAuth Bearer access token.' });
+    return null;
+  }
+  return authHeader;
+};
+
+app.post('/api/meet/spaces', async (req, res) => {
+  const authHeader = requireGoogleBearerToken(req, res);
+  if (!authHeader) return;
+  try {
+    const response = await fetch('https://meet.googleapis.com/v2/spaces', {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(req.body || {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    return res.status(response.status).json(data);
+  } catch (err: any) {
+    return res.status(502).json({ error: err?.message || 'Failed to create Google Meet space.' });
+  }
+});
+
+app.get('/api/meet/spaces/:spaceId', async (req, res) => {
+  const authHeader = requireGoogleBearerToken(req, res);
+  if (!authHeader) return;
+  try {
+    const spaceId = encodeURIComponent(req.params.spaceId);
+    const response = await fetch(`https://meet.googleapis.com/v2/spaces/${spaceId}`, {
+      method: 'GET',
+      headers: { Authorization: authHeader },
+    });
+    const data = await response.json().catch(() => ({}));
+    return res.status(response.status).json(data);
+  } catch (err: any) {
+    return res.status(502).json({ error: err?.message || 'Failed to fetch Google Meet space.' });
+  }
+});
+
+app.patch('/api/meet/spaces/:spaceId', async (req, res) => {
+  const authHeader = requireGoogleBearerToken(req, res);
+  if (!authHeader) return;
+  try {
+    const spaceId = encodeURIComponent(req.params.spaceId);
+    const response = await fetch(
+      `https://meet.googleapis.com/v2/spaces/${spaceId}?updateMask=config.accessType,config.entryPointAccess`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ config: req.body?.config || {} }),
+      }
+    );
+    const data = await response.json().catch(() => ({}));
+    return res.status(response.status).json(data);
+  } catch (err: any) {
+    return res.status(502).json({ error: err?.message || 'Failed to update Google Meet settings.' });
+  }
+});
+
+app.post('/api/meet/spaces/:spaceId/end', async (req, res) => {
+  const authHeader = requireGoogleBearerToken(req, res);
+  if (!authHeader) return;
+  try {
+    const spaceId = encodeURIComponent(req.params.spaceId);
+    const response = await fetch(
+      `https://meet.googleapis.com/v2/spaces/${spaceId}:endActiveConference`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      }
+    );
+    const data = await response.json().catch(() => ({}));
+    return res.status(response.status).json(data);
+  } catch (err: any) {
+    return res.status(502).json({ error: err?.message || 'Failed to end Google Meet conference.' });
+  }
+});
+
+app.get('/api/meet/conferenceRecords', async (req, res) => {
+  const authHeader = requireGoogleBearerToken(req, res);
+  if (!authHeader) return;
+  try {
+    const response = await fetch('https://meet.googleapis.com/v2/conferenceRecords?pageSize=5', {
+      method: 'GET',
+      headers: { Authorization: authHeader },
+    });
+    const data = await response.json().catch(() => ({}));
+    return res.status(response.status).json(data);
+  } catch (err: any) {
+    return res.status(502).json({ error: err?.message || 'Failed to list conference records.' });
   }
 });
 

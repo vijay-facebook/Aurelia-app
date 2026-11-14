@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Aurelia Studio</string>
+    <string name="notification_channel_id">aurelia_appointments</string>
+    <string name="notification_channel_name">Appointments &amp; Offers</string>
+</resources>

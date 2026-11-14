@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MapPin, Phone, CheckCircle2 } from 'lucide-react';
+import { MapPin, Phone, CheckCircle2, Video, ExternalLink } from 'lucide-react';
 import { useConfig } from '../context/ConfigContext';
 import {
   BookingPaymentQR,
@@ -8,6 +8,13 @@ import {
   calculateEstimatedBookingTotal,
   createBookingReference,
 } from './BookingPaymentQR';
+import {
+  BookingHistoryEntry,
+  HISTORY_UPDATED_EVENT,
+  loadBookingHistory,
+  recordBookingHistory,
+} from '../utils/bookingHistory';
+import { LoyaltyPointsTracker } from './LoyaltyPointsTracker';
 
 interface BookingSectionProps {
   preselectedService?: string;
@@ -29,6 +36,18 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
   const [bookingRef, setBookingRef] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('deposit');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending');
+  const [appliedRewardLabel, setAppliedRewardLabel] = useState<string | null>(null);
+  const [meetAppointments, setMeetAppointments] = useState<BookingHistoryEntry[]>(() =>
+    loadBookingHistory().filter((item) => Boolean(item.meetUrl))
+  );
+
+  useEffect(() => {
+    const sync = () => {
+      setMeetAppointments(loadBookingHistory().filter((item) => Boolean(item.meetUrl)));
+    };
+    window.addEventListener(HISTORY_UPDATED_EVENT, sync);
+    return () => window.removeEventListener(HISTORY_UPDATED_EVENT, sync);
+  }, []);
 
   useEffect(() => {
     if (preselectedService) {
@@ -48,9 +67,17 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
       return;
     }
     setFormError(null);
-    setBookingRef(createBookingReference(config.brand.name));
+    const generatedRef = createBookingReference(config.brand.name);
+    setBookingRef(generatedRef);
     setPaymentMode(estimatedTotal > 0 ? 'deposit' : 'open');
     setPaymentStatus('pending');
+    recordBookingHistory({
+      services: [formData.service],
+      date: formData.date,
+      timeSlot: formData.timeSlot,
+      customerName: formData.fullName.trim(),
+      bookingRef: generatedRef,
+    });
     setSubmitted(true);
   };
 
@@ -73,7 +100,11 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
       }`
     : '';
 
-  const whatsappMessage = encodeURIComponent(`${baseWhatsappText}${paymentSuffix}`);
+  const rewardSuffix = appliedRewardLabel
+    ? `\nLoyalty Reward Redeemed: ${appliedRewardLabel}`
+    : '';
+
+  const whatsappMessage = encodeURIComponent(`${baseWhatsappText}${paymentSuffix}${rewardSuffix}`);
 
   return (
     <section id="reservations" className="bg-[#1D1612] text-[#F6F1EA] py-24 lg:py-32 border-t border-[#D8C8B4]/20 font-sans">
@@ -127,6 +158,13 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
                   </p>
                 </div>
 
+                <LoyaltyPointsTracker
+                  variant="dark"
+                  justEarnedPoints={config.booking.pointsPerAppointment ?? 100}
+                  rewardApplied={Boolean(appliedRewardLabel)}
+                  onApplyReward={(label) => setAppliedRewardLabel(label)}
+                />
+
                 <BookingPaymentQR
                   customerName={formData.fullName}
                   services={[formData.service]}
@@ -161,6 +199,45 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
+                <LoyaltyPointsTracker
+                  variant="dark"
+                  rewardApplied={Boolean(appliedRewardLabel)}
+                  onApplyReward={(label) => setAppliedRewardLabel(label)}
+                />
+                {meetAppointments.length > 0 && (
+                  <div className="bg-[#15100D] border border-[#D8C8B4]/25 rounded-[10px] p-4 space-y-2.5 text-xs">
+                    <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#D9B98F] font-semibold">
+                      <Video className="w-3.5 h-3.5" />
+                      <span>Your Consultation Google Meet Links</span>
+                    </div>
+                    <div className="space-y-2">
+                      {meetAppointments.slice(0, 3).map((appt) => (
+                        <div
+                          key={appt.id}
+                          className="flex flex-wrap items-center justify-between gap-2 bg-[#2A211B] border border-[#D8C8B4]/20 rounded-[6px] px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium text-[#F6F1EA] truncate">
+                              {appt.customerName || appt.bookingRef || 'Appointment'} · {appt.services.join(', ')}
+                            </p>
+                            <p className="text-[10px] text-[#E3D7C7]/70 font-mono tabular-nums">
+                              {[appt.date || 'Scheduled', appt.timeSlot].filter(Boolean).join(' • ')}
+                            </p>
+                          </div>
+                          <a
+                            href={appt.meetUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 bg-[#D9B98F] hover:bg-[#E3D7C7] text-[#1D1612] px-3 py-1.5 rounded-full text-[10px] uppercase tracking-wider font-semibold shrink-0"
+                          >
+                            <span>Join Meet</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {formError && (
                   <div className="bg-red-500/15 border border-red-500/30 text-red-200 text-xs px-4 py-2.5 rounded-[6px]">
                     {formError}
