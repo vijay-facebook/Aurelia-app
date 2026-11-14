@@ -884,36 +884,72 @@ export const ExtraEditors: React.FC<ExtraEditorsProps> = ({ tab, config, update,
     case 'booking': {
       const b = config.booking;
       return (
-        <Panel
-          title="Booking & WhatsApp"
-          subtitle="Bookings are sent to your WhatsApp as a pre-filled message."
-        >
-          <TextField
-            label="WhatsApp number for bookings"
-            value={b.whatsappNumber}
-            onChange={(v) => update('booking.whatsappNumber', v)}
-            placeholder="919876543210"
-            hint="Digits only, with country code and no + sign. Example for India: 919876543210"
-          />
-          <TextAreaField
-            label="WhatsApp message template"
-            rows={8}
-            value={b.whatsappTemplate}
-            onChange={(v) => update('booking.whatsappTemplate', v)}
-            hint="Placeholders you can use: {service} {date} {time} {name} {phone}"
-          />
-          <StringListField
-            label="Time slots offered to customers"
-            values={b.timeSlots}
-            onChange={(v) => update('booking.timeSlots', v)}
-            addLabel="Add slot"
-          />
-          <TextField
-            label="Success message"
-            value={b.successMessage}
-            onChange={(v) => update('booking.successMessage', v)}
-          />
-        </Panel>
+        <div className="space-y-6">
+          <Panel
+            title="Booking & WhatsApp"
+            subtitle="Bookings are sent to your WhatsApp as a pre-filled message."
+          >
+            <TextField
+              label="WhatsApp number for bookings"
+              value={b.whatsappNumber}
+              onChange={(v) => update('booking.whatsappNumber', v)}
+              placeholder="919876543210"
+              hint="Digits only, with country code and no + sign. Example for India: 919876543210"
+            />
+            <TextAreaField
+              label="WhatsApp message template"
+              rows={8}
+              value={b.whatsappTemplate}
+              onChange={(v) => update('booking.whatsappTemplate', v)}
+              hint="Placeholders you can use: {service} {date} {time} {name} {phone}"
+            />
+            <StringListField
+              label="Time slots offered to customers"
+              values={b.timeSlots}
+              onChange={(v) => update('booking.timeSlots', v)}
+              addLabel="Add slot"
+            />
+            <TextField
+              label="Success message"
+              value={b.successMessage}
+              onChange={(v) => update('booking.successMessage', v)}
+            />
+          </Panel>
+
+          <Panel
+            title="Contactless Payment & QR Code"
+            subtitle="Displays a shop-specific payment QR code to customers immediately after they confirm a booking."
+          >
+            <ToggleField
+              label="Show contactless payment QR code after booking confirmation"
+              checked={b.acceptContactlessPayment !== false}
+              onChange={(v) => update('booking.acceptContactlessPayment', v)}
+            />
+            <div className="grid sm:grid-cols-2 gap-4">
+              <TextField
+                label="Shop UPI ID / Payment Address"
+                value={b.upiId || ''}
+                onChange={(v) => update('booking.upiId', v)}
+                placeholder="yourshop@okaxis"
+                hint="Leave blank to auto-derive from your brand slug."
+              />
+              <TextField
+                label="Payee / Business Name on QR"
+                value={b.payeeName || ''}
+                onChange={(v) => update('booking.payeeName', v)}
+                placeholder={config.brand.name}
+                hint="Shown to the customer in their payment app when scanning."
+              />
+            </div>
+            <TextAreaField
+              label="Customer Payment Instructions"
+              rows={2}
+              value={b.paymentNote || ''}
+              onChange={(v) => update('booking.paymentNote', v)}
+              hint="Shown beneath the shop payment QR code after a booking is confirmed."
+            />
+          </Panel>
+        </div>
       );
     }
 

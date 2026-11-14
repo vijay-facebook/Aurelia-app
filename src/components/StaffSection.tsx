@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StaffMemberConfig } from '../config/types';
 import { useConfig } from '../context/ConfigContext';
 import { StaffModal } from './StaffModal';
-import { Clock, Instagram, Award, ArrowRight, ExternalLink } from 'lucide-react';
+import { Instagram, Award, ArrowRight, ExternalLink } from 'lucide-react';
 
 interface StaffSectionProps {
   onBookWithStylist: (stylistName: string) => void;
@@ -56,12 +56,20 @@ export const StaffSection: React.FC<StaffSectionProps> = ({ onBookWithStylist })
                 />
 
                 {/* Availability Pill */}
-                <div className="absolute bottom-3 left-3 right-3 bg-[#F6F1EA]/95 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#D8C8B4] flex items-center justify-between text-[10px] text-[#1D1612]">
-                  <span className="flex items-center gap-1 font-medium text-[#8C6A43]">
-                    <Clock className="w-3 h-3" />
-                    <span>Available</span>
+                <div className="absolute bottom-3 left-3 right-3 bg-[#F6F1EA]/95 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#D8C8B4] flex items-center justify-between gap-2 text-[10px] text-[#1D1612]">
+                  <span className="flex items-center gap-1.5 font-medium text-[#8C6A43] shrink-0">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        staff.availabilityStatus === 'Off Duty'
+                          ? 'bg-red-500'
+                          : staff.availabilityStatus === 'Busy' || staff.availabilityStatus === 'On Break'
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-600'
+                      }`}
+                    />
+                    <span>{staff.availabilityStatus || 'Available'}</span>
                   </span>
-                  <span className="font-mono text-[#6F5F51]">{staff.availableNext}</span>
+                  <span className="font-mono text-[#6F5F51] truncate">{staff.availableNext}</span>
                 </div>
               </div>
 

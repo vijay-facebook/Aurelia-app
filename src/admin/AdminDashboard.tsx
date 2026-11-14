@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { SiteConfig, ServiceItemConfig, StaffMemberConfig, MenuItemConfig, GalleryImageConfig, VideoItemConfig, OfferItemConfig, HomeServiceConfig, ReviewItemConfig, SocialPostConfig } from '../config/types';
+import { SiteConfig, ServiceItemConfig, MenuItemConfig, GalleryImageConfig, VideoItemConfig, OfferItemConfig, HomeServiceConfig, ReviewItemConfig, SocialPostConfig } from '../config/types';
 import { defaultConfig } from '../config/defaultConfig';
 import { 
   LayoutDashboard, Globe, Megaphone, Compass, Sparkles, UserCheck, 
   Menu as MenuIcon, Image as ImageIcon, Video, Tag, Home, MessageSquare, 
   Share2, Calendar, Eye, Settings, Shield, LogOut, Save, RotateCcw, Download, Upload, Plus, Trash2, Check, AlertCircle,
-  MapPin, Clock, ToggleRight, Rocket, Monitor, Smartphone, RefreshCw, X, ExternalLink
+  MapPin, Clock, ToggleRight, Rocket, Monitor, Smartphone, RefreshCw, X, ExternalLink, LayoutTemplate
   } from 'lucide-react';
 import { AdminErrorLogger } from '../components/AdminErrorLogger';
 import { ExtraEditors } from './ExtraEditors';
+import { StaffManagementEditor } from './StaffManagementEditor';
+import { PromotionStudio } from '../components/sections/PromotionStudio';
 import { adminFetch } from './api';
 
 const DRAFT_KEY = 'salon_draft_config';
@@ -18,7 +20,7 @@ const PREVIEW_TARGETS: Record<string, string> = {
   quickstart: 'top', brand: 'top', announcement: 'top', navigation: 'top', sections: 'top', seo: 'top',
   hero: 'hero', business: 'footer', location: 'footer', hours: 'footer',
   services: 'services', story: 'about', staff: 'team', menu: 'menu', gallery: 'gallery',
-  videos: 'videos', offers: 'offers', homeServices: 'home-services', reviews: 'reviews',
+  videos: 'videos', offers: 'offers', promotions: 'offers', homeServices: 'home-services', reviews: 'reviews',
   social: 'social', booking: 'reservations',
 };
 
@@ -254,11 +256,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     { id: 'hours', label: 'Opening Hours', icon: Clock },
     { id: 'services', label: 'Services Grid', icon: LayoutDashboard },
     { id: 'story', label: 'Story / About', icon: UserCheck },
-    { id: 'staff', label: 'Master Artists', icon: UserCheck },
+    { id: 'staff', label: 'Staff Management', icon: UserCheck },
     { id: 'menu', label: 'Service Menu', icon: MenuIcon },
     { id: 'gallery', label: 'Gallery', icon: ImageIcon },
     { id: 'videos', label: 'Video Gallery', icon: Video },
     { id: 'offers', label: 'Session Offers', icon: Tag },
+    { id: 'promotions', label: 'Promotion Studio', icon: LayoutTemplate },
     { id: 'homeServices', label: 'At-Home Services', icon: Home },
     { id: 'reviews', label: 'Reviews & Kind Words', icon: MessageSquare },
     { id: 'social', label: 'Social & Feed', icon: Share2 },
@@ -802,6 +805,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                         title: 'New Service',
                         category: 'hair',
                         subtitle: 'Service subtitle and description.',
+                        extendedDescription: 'Detailed description shown when visitors click the service image.',
                         price: 'from ₹2,000',
                         numericPrice: 2000,
                         image: config.services[0]?.image || '',
@@ -839,7 +843,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                             value={service.title}
                             onChange={(e) => {
                               const updated = [...config.services];
-                              updated[index].title = e.target.value;
+                              updated[index] = { ...updated[index], title: e.target.value };
                               updateNested('services', updated);
                             }}
                             className="w-full bg-[#161B22] border border-[#30363D] text-white p-2.5 rounded text-xs"
@@ -852,7 +856,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                             value={service.price}
                             onChange={(e) => {
                               const updated = [...config.services];
-                              updated[index].price = e.target.value;
+                              updated[index] = { ...updated[index], price: e.target.value };
                               updateNested('services', updated);
                             }}
                             className="w-full bg-[#161B22] border border-[#30363D] text-white p-2.5 rounded text-xs"
@@ -861,15 +865,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[11px] text-[#8B949E]">Subtitle / Description</label>
+                        <label className="text-[11px] text-[#8B949E]">Subtitle / Short Card Description</label>
                         <input
                           type="text"
                           value={service.subtitle}
                           onChange={(e) => {
                             const updated = [...config.services];
-                            updated[index].subtitle = e.target.value;
+                            updated[index] = { ...updated[index], subtitle: e.target.value };
                             updateNested('services', updated);
                           }}
+                          className="w-full bg-[#161B22] border border-[#30363D] text-white p-2.5 rounded text-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-[#8B949E]">Extended Description (Service Detail Popup)</label>
+                        <textarea
+                          rows={3}
+                          value={service.extendedDescription || ''}
+                          onChange={(e) => {
+                            const updated = [...config.services];
+                            updated[index] = { ...updated[index], extendedDescription: e.target.value };
+                            updateNested('services', updated);
+                          }}
+                          placeholder="Full description shown when clicking on the service image..."
                           className="w-full bg-[#161B22] border border-[#30363D] text-white p-2.5 rounded text-xs"
                         />
                       </div>
@@ -897,134 +916,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               </div>
             )}
 
-            {/* STAFF / ARTISTS */}
+            {/* STAFF MANAGEMENT */}
             {activeTab === 'staff' && (
-              <div className="bg-[#161B22] border border-[#30363D] rounded-xl p-6 lg:p-8 space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-[#F2F4F8]">Master Artists & Practitioners</h2>
-                    <p className="text-xs text-[#8B949E]">Manage salon staff, bios, specialties, and photos.</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const newStaff: StaffMemberConfig = {
-                        id: 'staff-' + Date.now(),
-                        name: 'New Stylist',
-                        role: 'Senior Stylist',
-                        specialties: ['Precision Cuts'],
-                        experience: '5 Years Experience',
-                        bio: 'Expert stylist in modern cuts and styling.',
-                        image: config.staff[0]?.image || '',
-                        availableNext: 'Today, 3:00 PM',
-                        instagram: '@stylist',
-                        sinceYear: '2022',
-                        show: true,
-                      };
-                      updateNested('staff', [...config.staff, newStaff]);
-                    }}
-                    className="px-3 py-1.5 bg-[#238636] hover:bg-[#2ea043] text-white rounded-lg text-xs font-medium flex items-center gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Artist</span>
-                  </button>
-                </div>
-
-                <div className="space-y-6">
-                  {config.staff.map((staff, index) => (
-                    <div key={staff.id} className="bg-[#0D1117] border border-[#30363D] p-5 rounded-lg space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono text-[#58A6FF]">{staff.name}</span>
-                        <button
-                          onClick={() => {
-                            const updated = config.staff.filter((s) => s.id !== staff.id);
-                            updateNested('staff', updated);
-                          }}
-                          className="text-red-400 hover:text-red-300 p-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[11px] text-[#8B949E]">Name</label>
-                          <input
-                            type="text"
-                            value={staff.name}
-                            onChange={(e) => {
-                              const updated = [...config.staff];
-                              updated[index].name = e.target.value;
-                              updateNested('staff', updated);
-                            }}
-                            className="w-full bg-[#161B22] border border-[#30363D] text-white p-2.5 rounded text-xs"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[11px] text-[#8B949E]">Role</label>
-                          <select
-                            value={staff.role}
-                            onChange={(e) => {
-                              const updated = [...config.staff];
-                              updated[index].role = e.target.value;
-                              updateNested('staff', updated);
-                            }}
-                            className="w-full bg-[#161B22] border border-[#30363D] text-white p-2.5 rounded text-xs"
-                          >
-                            <option value="Senior Stylist">Senior Stylist</option>
-                            <option value="Master Artist">Master Artist</option>
-                            <option value="Skin Specialist">Skin Specialist</option>
-                            <option value="Founder & Creative Director">Founder & Creative Director</option>
-                            <option value="Other">Other</option>
-                          </select>
-                          <input
-                            type="text"
-                            value={staff.role}
-                            onChange={(e) => {
-                              const updated = [...config.staff];
-                              updated[index].role = e.target.value;
-                              updateNested('staff', updated);
-                            }}
-                            className="w-full bg-[#161B22] border border-[#30363D] text-white p-2.5 rounded text-xs mt-2"
-                            placeholder="Or type custom role"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] text-[#8B949E]">Biography</label>
-                        <textarea
-                          rows={2}
-                          value={staff.bio}
-                          onChange={(e) => {
-                            const updated = [...config.staff];
-                            updated[index].bio = e.target.value;
-                            updateNested('staff', updated);
-                          }}
-                          className="w-full bg-[#161B22] border border-[#30363D] text-white p-2.5 rounded text-xs"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] text-[#8B949E]">Photo Upload</label>
-                        <div className="flex items-center gap-3">
-                          {staff.image && <img src={staff.image} alt="" className="h-12 w-10 object-cover rounded border border-[#30363D]" />}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            disabled={uploading}
-                            onChange={(e) => handleFileUpload(e, (url) => {
-                              const updated = [...config.staff];
-                              updated[index].image = url;
-                              updateNested('staff', updated);
-                            })}
-                            className="text-xs text-[#8B949E]"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <StaffManagementEditor
+                config={config}
+                update={updateNested}
+                upload={handleFileUpload}
+                uploading={uploading}
+              />
             )}
 
             {/* OFFERS */}
@@ -1162,6 +1061,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               upload={handleFileUpload}
               uploading={uploading}
             />
+
+            {/* PROMOTION STUDIO */}
+            {activeTab === 'promotions' && (
+              <PromotionStudio theme="dark" configOverride={config} />
+            )}
 
             {/* SEO & METADATA */}
             {activeTab === 'seo' && (

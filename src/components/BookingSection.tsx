@@ -1,6 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MapPin, Phone, CheckCircle2 } from 'lucide-react';
 import { useConfig } from '../context/ConfigContext';
+import {
+  BookingPaymentQR,
+  PaymentMode,
+  PaymentStatus,
+  calculateEstimatedBookingTotal,
+  createBookingReference,
+} from './BookingPaymentQR';
 
 interface BookingSectionProps {
   preselectedService?: string;
@@ -18,26 +25,55 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
   });
 
   const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [bookingRef, setBookingRef] = useState('');
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('deposit');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending');
+
+  useEffect(() => {
+    if (preselectedService) {
+      setFormData((prev) => ({ ...prev, service: preselectedService }));
+    }
+  }, [preselectedService]);
+
+  const estimatedTotal = useMemo(
+    () => calculateEstimatedBookingTotal([formData.service], config),
+    [formData.service, config]
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.fullName || !formData.phone) {
-      alert('Please enter your name and phone number.');
+    if (!formData.fullName.trim() || !formData.phone.trim()) {
+      setFormError('Please enter your name and phone number.');
       return;
     }
+    setFormError(null);
+    setBookingRef(createBookingReference(config.brand.name));
+    setPaymentMode(estimatedTotal > 0 ? 'deposit' : 'open');
+    setPaymentStatus('pending');
     setSubmitted(true);
   };
 
-  const whatsappMessage = encodeURIComponent(
-    config.booking.whatsappTemplate
-      ? config.booking.whatsappTemplate
-          .replace('{service}', formData.service)
-          .replace('{date}', formData.date || 'Soonest Available')
-          .replace('{time}', formData.timeSlot)
-          .replace('{name}', formData.fullName)
-          .replace('{phone}', formData.phone)
-      : `Hello Aurelia Concierge, I would like to book an appointment:\nService: ${formData.service}\nDate: ${formData.date}\nTime: ${formData.timeSlot}\nName: ${formData.fullName}\nPhone: ${formData.phone}`
-  );
+  const baseWhatsappText = config.booking.whatsappTemplate
+    ? config.booking.whatsappTemplate
+        .replace('{service}', formData.service)
+        .replace('{date}', formData.date || 'Soonest Available')
+        .replace('{time}', formData.timeSlot)
+        .replace('{name}', formData.fullName)
+        .replace('{phone}', formData.phone)
+    : `Hello Aurelia Concierge, I would like to book an appointment:\nService: ${formData.service}\nDate: ${formData.date}\nTime: ${formData.timeSlot}\nName: ${formData.fullName}\nPhone: ${formData.phone}`;
+
+  const paymentSuffix = bookingRef
+    ? `\nBooking Ref: ${bookingRef}${
+        paymentStatus === 'paid'
+          ? ' (Contactless QR Payment Completed)'
+          : paymentStatus === 'pay-at-studio'
+            ? ' (Pay at Studio)'
+            : ''
+      }`
+    : '';
+
+  const whatsappMessage = encodeURIComponent(`${baseWhatsappText}${paymentSuffix}`);
 
   return (
     <section id="reservations" className="bg-[#1D1612] text-[#F6F1EA] py-24 lg:py-32 border-t border-[#D8C8B4]/20 font-sans">
@@ -78,20 +114,34 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
           <div className="bg-[#2A211B] p-8 lg:p-10 rounded-[12px] border border-[#D8C8B4]/20 shadow-2xl">
             
             {submitted ? (
-              <div className="text-center py-10 space-y-6 animate-fade-in">
-                <div className="w-16 h-16 bg-[#D9B98F]/20 text-[#D9B98F] rounded-full flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-10 h-10" />
+              <div className="text-center py-4 space-y-6 animate-fade-in">
+                <div className="w-14 h-14 bg-[#D9B98F]/20 text-[#D9B98F] rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-8 h-8" />
                 </div>
                 <div className="space-y-2">
                   <h3 className="font-serif text-3xl font-light text-[#F6F1EA]">
-                    Appointment Requested
+                    Appointment Confirmed
                   </h3>
                   <p className="text-xs text-[#E3D7C7]/80 max-w-md mx-auto">
                     {config.booking.successMessage || 'Thank you for your request. We will confirm shortly.'}
                   </p>
                 </div>
 
-                <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+                <BookingPaymentQR
+                  customerName={formData.fullName}
+                  services={[formData.service]}
+                  date={formData.date}
+                  timeSlot={formData.timeSlot}
+                  bookingRef={bookingRef}
+                  estimatedTotal={estimatedTotal}
+                  paymentMode={paymentMode}
+                  paymentStatus={paymentStatus}
+                  onPaymentModeChange={setPaymentMode}
+                  onPaymentStatusChange={setPaymentStatus}
+                  variant="dark"
+                />
+
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
                   <a
                     href={`https://wa.me/${config.booking.whatsappNumber || config.businessInfo.whatsappNumber}?text=${whatsappMessage}`}
                     target="_blank"
@@ -100,10 +150,22 @@ export const BookingSection: React.FC<BookingSectionProps> = ({ preselectedServi
                   >
                     <span>Confirm via WhatsApp ↗</span>
                   </a>
+                  <button
+                    type="button"
+                    onClick={() => setSubmitted(false)}
+                    className="w-full sm:w-auto border border-[#D8C8B4]/30 text-[#E3D7C7] px-6 py-3 rounded-full text-xs font-medium uppercase tracking-wider hover:border-[#D9B98F] transition-colors cursor-pointer"
+                  >
+                    Book Another
+                  </button>
                 </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
+                {formError && (
+                  <div className="bg-red-500/15 border border-red-500/30 text-red-200 text-xs px-4 py-2.5 rounded-[6px]">
+                    {formError}
+                  </div>
+                )}
                 <div className="grid sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-widest text-[#D9B98F] font-medium block">

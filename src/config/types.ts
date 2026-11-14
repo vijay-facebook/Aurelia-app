@@ -26,6 +26,7 @@ export interface ServiceItemConfig {
   title: string;
   category: 'hair' | 'skin' | 'bridal' | 'nails' | 'spa' | string;
   subtitle: string;
+  extendedDescription?: string;
   price: string;
   numericPrice: number;
   image: string;
@@ -37,6 +38,8 @@ export interface StoryStat {
   value: string;
 }
 
+export type StaffAvailabilityStatus = 'Available' | 'Busy' | 'On Break' | 'Off Duty' | string;
+
 export interface StaffMemberConfig {
   id: string;
   name: string;
@@ -46,6 +49,7 @@ export interface StaffMemberConfig {
   bio: string;
   image: string;
   availableNext: string;
+  availabilityStatus?: StaffAvailabilityStatus;
   instagram: string;
   sinceYear: string;
   show: boolean;
@@ -222,6 +226,10 @@ export interface SiteConfig {
     whatsappTemplate: string;
     timeSlots: string[];
     successMessage: string;
+    acceptContactlessPayment?: boolean;
+    upiId?: string;
+    payeeName?: string;
+    paymentNote?: string;
   };
   sectionsVisibility: {
     services: boolean;
