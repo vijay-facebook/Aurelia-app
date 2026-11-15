@@ -184,9 +184,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
         <input
           type={visible ? 'text' : 'password'}
           required
-          minLength={12}
+          minLength={mode === 'login' ? undefined : 12}
           autoComplete={autoComplete}
-          placeholder="At least 12 characters"
+          placeholder={mode === 'login' ? 'Enter your password' : 'At least 12 characters'}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className={inputClass + ' pr-12'}
