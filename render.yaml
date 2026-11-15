@@ -10,10 +10,16 @@ services:
     buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     envVars:
-      - key: ADMIN_PASSWORD
-        sync: false # you will be asked to type this in the Render dashboard
-      - key: SESSION_SECRET
-        generateValue: true
+      - key: SUPABASE_URL
+        value: https://hcrypnkcinvxattgfzwa.supabase.co
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ADMIN_SIGNUP_SECRET
+        sync: false
+      - key: PUBLIC_APP_URL
+        sync: false
       - key: DATA_DIR
         value: /var/data/site
       - key: UPLOADS_DIR

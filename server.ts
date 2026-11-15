@@ -4,7 +4,6 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import multer from 'multer';
-import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import { defaultConfig } from './src/config/defaultConfig';
@@ -15,22 +14,14 @@ const app = express();
 const port = process.env.PORT || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-const DEFAULT_PASSWORD = 'admin123';
-const DEFAULT_SECRET = 'aurelia-secure-secret-key';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || DEFAULT_PASSWORD;
-const SESSION_SECRET = process.env.SESSION_SECRET || DEFAULT_SECRET;
-
-// A live site must never run with the well-known default credentials.
-if (IS_PROD && (ADMIN_PASSWORD === DEFAULT_PASSWORD || SESSION_SECRET === DEFAULT_SECRET)) {
-  console.error(
-    '\n[SECURITY] Refusing to start in production with the default admin password / session secret.\n' +
-      'Set the ADMIN_PASSWORD and SESSION_SECRET environment variables to your own private values and restart.\n'
-  );
-  process.exit(1);
-}
-if (!IS_PROD && (ADMIN_PASSWORD === DEFAULT_PASSWORD || SESSION_SECRET === DEFAULT_SECRET)) {
-  console.warn('[SECURITY] Using default admin credentials (development only). Change them before going live.');
-}
+// Supabase Auth is the sole authentication provider for the admin panel.
+// Keep the service-role key and one-time bootstrap secret on the server only.
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+const SUPABASE_API_KEY =
+  process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const ADMIN_SIGNUP_SECRET = process.env.ADMIN_SIGNUP_SECRET || '';
+const PUBLIC_APP_URL = (process.env.PUBLIC_APP_URL || '').replace(/\/+$/, '');
 
 // Behind Render / Railway / Cloud Run / nginx we need the real client IP and protocol.
 app.set('trust proxy', 1);
@@ -145,7 +136,6 @@ if (!fs.existsSync(CONFIG_FILE)) {
 
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(express.json({ limit: '10mb' }));
-app.use(cookieParser(SESSION_SECRET));
 
 // Uploaded files: never let an uploaded file (e.g. an SVG) run scripts on our origin.
 app.use(
@@ -159,33 +149,12 @@ app.use(
 app.use('/public', express.static(path.resolve(process.cwd(), 'public')));
 app.use(express.static(path.resolve(process.cwd(), 'public'))); // For demo assets
 
-/* ---------------- admin auth ---------------- */
+/* ---------------- Supabase admin auth ---------------- */
 
-const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-
-// Stateless signed login token ("<expiry>.<signature>"). Unlike an in-memory list, it survives server
-// restarts / redeploys, so the admin never gets silently logged out while editing.
-const signToken = (expires: number) =>
-  `${expires}.${crypto.createHmac('sha256', SESSION_SECRET).update(String(expires)).digest('hex')}`;
-
-const isValidSession = (token?: string) => {
-  if (!token || typeof token !== 'string') return false;
-  const [payload, sig] = token.split('.');
-  if (!payload || !sig) return false;
-  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
-  if (sig.length !== expected.length) return false;
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
-  return Number(payload) > Date.now();
-};
-
-const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const bearer = req.headers['authorization']?.toString().replace('Bearer ', '');
-  const token = bearer || req.cookies?.aurelia_admin_token;
-  if (isValidSession(token)) {
-    return next();
-  }
-  return res.status(401).json({ error: 'Session expired. Please log in again.' });
-};
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILS = 8;
+const loginFails = new Map<string, { count: number; since: number }>();
+let adminSignupInProgress = false;
 
 const safeEqual = (a: string, b: string) => {
   const ha = crypto.createHash('sha256').update(a).digest();
@@ -193,10 +162,93 @@ const safeEqual = (a: string, b: string) => {
   return crypto.timingSafeEqual(ha, hb);
 };
 
-// Brute-force protection: max 8 wrong passwords per 15 minutes per IP.
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX_FAILS = 8;
-const loginFails = new Map<string, { count: number; since: number }>();
+const hasSupabasePublicConfig = () => Boolean(SUPABASE_URL && SUPABASE_API_KEY);
+const hasSupabaseAdminConfig = () =>
+  Boolean(hasSupabasePublicConfig() && SUPABASE_SERVICE_ROLE_KEY);
+
+const parseJsonResponse = async (response: Response): Promise<any> =>
+  response.json().catch(() => ({}));
+
+const getAdminUserForToken = async (accessToken: string): Promise<any | null> => {
+  if (!hasSupabasePublicConfig() || !accessToken) return null;
+
+  const userResponse = await fetch(SUPABASE_URL + '/auth/v1/user', {
+    headers: {
+      apikey: SUPABASE_API_KEY,
+      Authorization: 'Bearer ' + accessToken,
+    },
+  });
+  if (!userResponse.ok) return null;
+
+  const user = await parseJsonResponse(userResponse);
+  if (!user?.id) return null;
+
+  // The role is read from the database, never trusted from user-editable JWT metadata.
+  const profileUrl = new URL(SUPABASE_URL + '/rest/v1/profiles');
+  profileUrl.searchParams.set('id', 'eq.' + user.id);
+  profileUrl.searchParams.set('select', 'role');
+  profileUrl.searchParams.set('limit', '1');
+
+  const profileResponse = await fetch(profileUrl, {
+    headers: {
+      apikey: SUPABASE_API_KEY,
+      Authorization: 'Bearer ' + accessToken,
+    },
+  });
+  if (!profileResponse.ok) return null;
+
+  const profiles = await parseJsonResponse(profileResponse);
+  return Array.isArray(profiles) && profiles[0]?.role === 'admin' ? user : null;
+};
+
+const getBearerToken = (req: express.Request) => {
+  const authorization = req.headers.authorization || '';
+  return authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+};
+
+const requireAdmin: express.RequestHandler = async (req, res, next) => {
+  const accessToken = getBearerToken(req);
+  if (!accessToken) {
+    return res.status(401).json({ error: 'Please sign in with an administrator account.' });
+  }
+
+  try {
+    const user = await getAdminUserForToken(accessToken);
+    if (!user) {
+      return res.status(401).json({ error: 'Your administrator session is invalid or has expired.' });
+    }
+    (req as express.Request & { adminUser?: any }).adminUser = user;
+    return next();
+  } catch (error) {
+    console.error('Admin session verification failed:', error);
+    return res.status(503).json({ error: 'Unable to verify the administrator session. Please try again.' });
+  }
+};
+
+const getLoginAttempt = (ip: string) => {
+  const now = Date.now();
+  const previous = loginFails.get(ip);
+  if (previous && now - previous.since > LOGIN_WINDOW_MS) {
+    loginFails.delete(ip);
+    return null;
+  }
+  return previous || null;
+};
+
+const registerLoginFailure = (ip: string) => {
+  const now = Date.now();
+  const previous = getLoginAttempt(ip);
+  loginFails.set(ip, {
+    count: (previous?.count ?? 0) + 1,
+    since: previous?.since ?? now,
+  });
+};
+
+const supabaseServiceHeaders = () => ({
+  apikey: SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY,
+  'Content-Type': 'application/json',
+});
 
 // Multer storage for uploads
 const storage = multer.diskStorage({
@@ -277,44 +329,312 @@ app.put('/api/config', requireAdmin, (req, res) => {
   }
 });
 
-// 3. Admin Login
-app.post('/api/admin/login', (req, res) => {
-  const ip = req.ip || 'unknown';
-  const now = Date.now();
-  const record = loginFails.get(ip);
-  if (record && now - record.since > LOGIN_WINDOW_MS) loginFails.delete(ip);
+// 3. Admin Sign Up (one-time, secret-protected bootstrap)
+app.post('/api/admin/signup', async (req, res) => {
+  const fullName = typeof req.body?.fullName === 'string' ? req.body.fullName.trim() : '';
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  const setupKey = typeof req.body?.setupKey === 'string' ? req.body.setupKey : '';
 
-  const current = loginFails.get(ip);
+  if (!hasSupabaseAdminConfig()) {
+    return res.status(503).json({
+      error: 'Admin sign-up is not configured. Add the Supabase server environment variables first.',
+    });
+  }
+  if (!ADMIN_SIGNUP_SECRET || !safeEqual(setupKey, ADMIN_SIGNUP_SECRET)) {
+    return res.status(403).json({ error: 'The admin setup key is invalid.' });
+  }
+  if (!fullName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Enter a valid name and email address.' });
+  }
+  if (password.length < 12) {
+    return res.status(400).json({ error: 'Use a password with at least 12 characters.' });
+  }
+  if (adminSignupInProgress) {
+    return res.status(409).json({ error: 'Admin setup is already in progress. Please try again shortly.' });
+  }
+
+  adminSignupInProgress = true;
+  let createdUserId = '';
+  try {
+    const existingAdminUrl = new URL(SUPABASE_URL + '/rest/v1/profiles');
+    existingAdminUrl.searchParams.set('select', 'id');
+    existingAdminUrl.searchParams.set('role', 'eq.admin');
+    existingAdminUrl.searchParams.set('limit', '1');
+
+    const existingAdminResponse = await fetch(existingAdminUrl, {
+      headers: supabaseServiceHeaders(),
+    });
+    const existingAdmins = await parseJsonResponse(existingAdminResponse);
+    if (!existingAdminResponse.ok) {
+      console.error('Could not check existing admin account:', existingAdmins);
+      return res.status(503).json({ error: 'Could not verify whether initial admin setup is available.' });
+    }
+    if (Array.isArray(existingAdmins) && existingAdmins.length > 0) {
+      return res.status(409).json({
+        error: 'An admin account already exists. Sign in instead; first-admin registration is now closed.',
+      });
+    }
+
+    const createUserResponse = await fetch(SUPABASE_URL + '/auth/v1/admin/users', {
+      method: 'POST',
+      headers: supabaseServiceHeaders(),
+      body: JSON.stringify({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: fullName },
+      }),
+    });
+    const createdUser = await parseJsonResponse(createUserResponse);
+    createdUserId = createdUser?.id || createdUser?.user?.id || '';
+    if (!createUserResponse.ok || !createdUserId) {
+      return res.status(400).json({
+        error: createdUser?.msg || createdUser?.message || createdUser?.error_description ||
+          'Could not create this admin account. The email may already be registered.',
+      });
+    }
+
+    // The auth trigger creates the profile; service role assigns the first admin role.
+    const profileResponse = await fetch(SUPABASE_URL + '/rest/v1/profiles?on_conflict=id', {
+      method: 'POST',
+      headers: {
+        ...supabaseServiceHeaders(),
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({
+        id: createdUserId,
+        full_name: fullName,
+        role: 'admin',
+      }),
+    });
+    if (!profileResponse.ok) {
+      const profileError = await parseJsonResponse(profileResponse);
+      console.error('Could not assign initial admin role:', profileError);
+      await fetch(SUPABASE_URL + '/auth/v1/admin/users/' + createdUserId, {
+        method: 'DELETE',
+        headers: supabaseServiceHeaders(),
+      }).catch(() => undefined);
+      createdUserId = '';
+      return res.status(500).json({ error: 'The account could not be assigned administrator access. Please check the profiles table and try again.' });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Admin account created. You can now sign in with your email and password.',
+    });
+  } catch (error) {
+    console.error('Admin sign-up failed:', error);
+    if (createdUserId) {
+      await fetch(SUPABASE_URL + '/auth/v1/admin/users/' + createdUserId, {
+        method: 'DELETE',
+        headers: supabaseServiceHeaders(),
+      }).catch(() => undefined);
+    }
+    return res.status(503).json({ error: 'Admin registration is temporarily unavailable.' });
+  } finally {
+    adminSignupInProgress = false;
+  }
+});
+
+// 4. Admin Sign In (Supabase Auth)
+app.post('/api/admin/login', async (req, res) => {
+  if (!hasSupabasePublicConfig()) {
+    return res.status(503).json({ error: 'Supabase admin authentication is not configured on the server.' });
+  }
+
+  const ip = req.ip || 'unknown';
+  const current = getLoginAttempt(ip);
   if (current && current.count >= LOGIN_MAX_FAILS) {
     return res.status(429).json({ error: 'Too many failed attempts. Please try again in 15 minutes.' });
   }
 
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
-  if (password && safeEqual(password, ADMIN_PASSWORD)) {
-    loginFails.delete(ip);
-    const token = signToken(now + SESSION_TTL_MS);
-    res.cookie('aurelia_admin_token', token, {
-      httpOnly: true,
-      secure: IS_PROD,
-      sameSite: 'lax',
-      maxAge: SESSION_TTL_MS,
-    });
-    return res.json({ success: true, token });
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Enter your admin email and password.' });
   }
 
-  loginFails.set(ip, { count: (current?.count ?? 0) + 1, since: current?.since ?? now });
-  return res.status(401).json({ error: 'Incorrect admin password' });
+  try {
+    const authResponse = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+    const authData = await parseJsonResponse(authResponse);
+    if (!authResponse.ok || !authData?.access_token || !authData?.refresh_token) {
+      registerLoginFailure(ip);
+      return res.status(401).json({ error: 'Invalid administrator email or password.' });
+    }
+
+    const adminUser = await getAdminUserForToken(authData.access_token);
+    if (!adminUser) {
+      await fetch(SUPABASE_URL + '/auth/v1/logout', {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_API_KEY,
+          Authorization: 'Bearer ' + authData.access_token,
+        },
+      }).catch(() => undefined);
+      registerLoginFailure(ip);
+      return res.status(403).json({ error: 'This account does not have administrator access.' });
+    }
+
+    loginFails.delete(ip);
+    return res.json({
+      success: true,
+      access_token: authData.access_token,
+      refresh_token: authData.refresh_token,
+      expires_in: authData.expires_in,
+      user: { id: adminUser.id, email: adminUser.email },
+    });
+  } catch (error) {
+    console.error('Admin sign-in failed:', error);
+    return res.status(503).json({ error: 'Unable to sign in right now. Please try again.' });
+  }
 });
 
-// 3b. Is the current admin login still valid? (used on page refresh)
-app.get('/api/admin/session', requireAdmin, (_req, res) => {
-  res.json({ ok: true });
+// 4a. Refresh the Supabase session when its access token expires.
+app.post('/api/admin/refresh', async (req, res) => {
+  if (!hasSupabasePublicConfig()) {
+    return res.status(503).json({ error: 'Supabase admin authentication is not configured.' });
+  }
+  const refreshToken = typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : '';
+  if (!refreshToken) return res.status(401).json({ error: 'Please sign in again.' });
+
+  try {
+    const refreshResponse = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    const refreshed = await parseJsonResponse(refreshResponse);
+    if (!refreshResponse.ok || !refreshed?.access_token || !refreshed?.refresh_token) {
+      return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+    }
+
+    const adminUser = await getAdminUserForToken(refreshed.access_token);
+    if (!adminUser) {
+      return res.status(403).json({ error: 'This account does not have administrator access.' });
+    }
+
+    return res.json({
+      access_token: refreshed.access_token,
+      refresh_token: refreshed.refresh_token,
+      expires_in: refreshed.expires_in,
+      user: { id: adminUser.id, email: adminUser.email },
+    });
+  } catch (error) {
+    console.error('Admin session refresh failed:', error);
+    return res.status(503).json({ error: 'Unable to refresh your session. Please try again.' });
+  }
 });
 
-// 4. Admin Logout
-app.post('/api/admin/logout', (req, res) => {
-  res.clearCookie('aurelia_admin_token');
-  res.json({ success: true });
+// 4b. Send a password recovery email. The response is generic to avoid account enumeration.
+app.post('/api/admin/forgot-password', async (req, res) => {
+  if (!hasSupabasePublicConfig()) {
+    return res.status(503).json({ error: 'Supabase admin authentication is not configured.' });
+  }
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Enter a valid email address.' });
+  }
+
+  const appUrl = PUBLIC_APP_URL || (IS_PROD ? '' : 'http://localhost:3000');
+  if (!appUrl) {
+    return res.status(503).json({ error: 'Set PUBLIC_APP_URL on the server before using password recovery.' });
+  }
+
+  try {
+    const redirectTo = appUrl + '/admin/reset-password';
+    const recoveryUrl = new URL(SUPABASE_URL + '/auth/v1/recover');
+    recoveryUrl.searchParams.set('redirect_to', redirectTo);
+    const recoveryResponse = await fetch(recoveryUrl, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    });
+    if (!recoveryResponse.ok) {
+      const recoveryError = await parseJsonResponse(recoveryResponse);
+      // Do not disclose whether the email belongs to an account.
+      console.warn('Supabase password recovery request was not accepted:', recoveryError?.message || recoveryResponse.status);
+    }
+    return res.json({
+      success: true,
+      message: 'If an administrator account exists for this email, a password reset link will be sent.',
+    });
+  } catch (error) {
+    console.error('Admin password recovery request failed:', error);
+    return res.status(503).json({ error: 'Password recovery is temporarily unavailable. Please try again.' });
+  }
+});
+
+// 4c. Complete password recovery using the access token in the Supabase recovery link.
+app.post('/api/admin/reset-password', async (req, res) => {
+  if (!hasSupabasePublicConfig()) {
+    return res.status(503).json({ error: 'Supabase admin authentication is not configured.' });
+  }
+  const accessToken = typeof req.body?.accessToken === 'string' ? req.body.accessToken : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (password.length < 12) {
+    return res.status(400).json({ error: 'Use a password with at least 12 characters.' });
+  }
+
+  try {
+    const adminUser = await getAdminUserForToken(accessToken);
+    if (!adminUser) {
+      return res.status(401).json({ error: 'This recovery link is invalid or expired. Request a new link.' });
+    }
+
+    const updateResponse = await fetch(SUPABASE_URL + '/auth/v1/user', {
+      method: 'PUT',
+      headers: {
+        apikey: SUPABASE_API_KEY,
+        Authorization: 'Bearer ' + accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ password }),
+    });
+    const updatedUser = await parseJsonResponse(updateResponse);
+    if (!updateResponse.ok) {
+      return res.status(400).json({ error: updatedUser?.msg || updatedUser?.message || 'Could not update the password.' });
+    }
+
+    return res.json({ success: true, message: 'Password updated. Sign in with your new password.' });
+  } catch (error) {
+    console.error('Admin password reset failed:', error);
+    return res.status(503).json({ error: 'Password reset is temporarily unavailable.' });
+  }
+});
+
+// 4d. Check the current admin session on page load.
+app.get('/api/admin/session', requireAdmin, (req, res) => {
+  const user = (req as express.Request & { adminUser?: any }).adminUser;
+  return res.json({ ok: true, user: user ? { id: user.id, email: user.email } : undefined });
+});
+
+// 4e. Sign out the current Supabase session.
+app.post('/api/admin/logout', async (req, res) => {
+  const accessToken = getBearerToken(req);
+  if (accessToken && hasSupabasePublicConfig()) {
+    await fetch(SUPABASE_URL + '/auth/v1/logout', {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_API_KEY,
+        Authorization: 'Bearer ' + accessToken,
+      },
+    }).catch(() => undefined);
+  }
+  return res.json({ success: true });
 });
 
 // 5. Upload File (Admin Only)

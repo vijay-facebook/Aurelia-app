@@ -27,17 +27,34 @@ Content is saved to `data/site-config.json` (with automatic backups in `data/bac
 
 ```bash
 npm install
-cp .env.example .env      # then edit ADMIN_PASSWORD and SESSION_SECRET
+cp .env.example .env      # fill in the server-side Supabase variables
 npm run dev               # http://localhost:3000   (admin: /admin)
 ```
+
+## Admin authentication (Supabase)
+
+The Admin Panel uses Supabase Auth for email/password sign-in, password recovery, and password updates. The first administrator is created once from `/admin/signup` using a private setup key. The server refuses first-admin signup after an admin profile exists.
+
+Required server-side environment variables:
+
+- `SUPABASE_URL`: Supabase project URL.
+- `SUPABASE_ANON_KEY`: project publishable/anon key for Auth requests.
+- `SUPABASE_SERVICE_ROLE_KEY`: server-only service-role secret used only for the first-admin bootstrap. Never expose it in browser code or a `VITE_*` variable.
+- `ADMIN_SIGNUP_SECRET`: long, private, one-time bootstrap key. Enter it only in the first-admin signup screen.
+- `PUBLIC_APP_URL`: public website origin, without a trailing slash, used for recovery redirects.
+
+Before first-admin signup, apply the migration in `supabase/migrations/202611150001_admin_auth_bootstrap.sql` in the Supabase SQL Editor. Configure Supabase Auth > URL Configuration so the Site URL is your website origin and the Redirect URLs include `http://localhost:3000/admin/reset-password` and your production `https://your-domain/admin/reset-password`.
+
+In Render, set the same variables in the service Environment tab. The checked-in `render.yaml` declares which values must be entered. Do not commit a real `.env` file or service-role key.
+
 
 ## Deploy for a new client (about 30 minutes)
 
 1. **Copy the template**: use "Use this template" on GitHub (or fork) - one copy per client.
 2. **Deploy** - pick one:
-   - **Render**: New > Blueprint > select the repo (uses `render.yaml`). Type a strong `ADMIN_PASSWORD` when asked. A persistent disk (paid instance) keeps content and uploads safe across redeploys.
-   - **Docker / any VPS**: `docker build -t salon . && docker run -p 3000:3000 -e ADMIN_PASSWORD=... -e SESSION_SECRET=... -v salon-data:/app/data -v salon-uploads:/app/public/uploads salon`
-   - **Plain Node server**: `npm install && npm run build && npm start` (set `ADMIN_PASSWORD` and `SESSION_SECRET` first).
+   - **Render**: New > Blueprint > select the repo (uses `render.yaml`). Configure the Supabase URL, anon key, service-role secret, admin setup secret, and public app URL. A persistent disk (paid instance) keeps content and uploads safe across redeploys.
+   - **Docker / any VPS**: `docker build -t salon . && docker run -p 3000:3000 -e SUPABASE_URL=... -e SUPABASE_ANON_KEY=... -e SUPABASE_SERVICE_ROLE_KEY=... -e ADMIN_SIGNUP_SECRET=... -e PUBLIC_APP_URL=... -v salon-data:/app/data -v salon-uploads:/app/public/uploads salon`
+   - **Plain Node server**: `npm install && npm run build && npm start` (set the Supabase environment variables first).
 3. Open `https://your-site/admin`, log in, and work through **Quick Setup**, then the left menu.
 4. Click **Save & Publish**, then connect the client's domain in your host's dashboard.
 
@@ -45,7 +62,9 @@ npm run dev               # http://localhost:3000   (admin: /admin)
 
 ## Security notes
 
-- In production the server **refuses to start** if `ADMIN_PASSWORD` or `SESSION_SECRET` are still the defaults.
+- Admin login verifies the Supabase Auth access token and reads the administrator role from `public.profiles` on the server for every protected API request.
+- The first-admin signup endpoint requires a server-only setup key and is closed automatically after the first admin exists.
+- Password reset responses do not reveal whether an email belongs to an account.
 - Login is rate-limited (8 wrong attempts per 15 minutes per IP).
 - Uploaded files are served with a sandboxing header so an uploaded SVG cannot run scripts.
 - Only add real customer reviews and photos you have the right to use.

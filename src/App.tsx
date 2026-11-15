@@ -24,7 +24,7 @@ import { Footer } from './components/Footer';
 import { ServiceItemConfig, MenuItemConfig, OfferItemConfig } from './config/types';
 import { Calendar, Check, Shield } from 'lucide-react';
 import { AdminLogin } from './admin/AdminLogin';
-import { adminFetch, setToken } from './admin/api';
+import { adminFetch, clearToken } from './admin/api';
 import { AdminDashboard } from './admin/AdminDashboard';
 import { PreviewShell } from './components/PreviewShell';
 
@@ -232,9 +232,10 @@ function AdminRoute() {
   return (
     <AdminDashboard
       onLogout={() => {
-        setToken('');
-        adminFetch('/api/admin/logout', { method: 'POST' }).catch(() => {});
-        setIsAdminAuthenticated(false);
+        adminFetch('/api/admin/logout', { method: 'POST' }).finally(() => {
+          clearToken();
+          setIsAdminAuthenticated(false);
+        });
       }}
     />
   );
@@ -246,7 +247,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<PublicWebsite />} />
-          <Route path="/admin" element={<AdminRoute />} />
+          <Route path="/admin/*" element={<AdminRoute />} />
           <Route path="/preview" element={<PreviewShell />} />
         </Routes>
       </BrowserRouter>
