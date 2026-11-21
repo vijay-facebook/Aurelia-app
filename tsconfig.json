@@ -25,5 +25,5 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "exclude": ["dist", "android"]
+  "exclude": ["dist", "android", "supabase"]
 }

@@ -1,8 +1,13 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
+  Auth,
   GoogleAuthProvider,
   User,
+  browserPopupRedirectResolver,
+  browserSessionPersistence,
   getAuth,
+  inMemoryPersistence,
+  initializeAuth,
   onAuthStateChanged,
   signInWithPopup,
 } from 'firebase/auth';
@@ -15,7 +20,17 @@ export const MEET_SCOPES = [
 ] as const;
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
+
+let auth: Auth;
+try {
+  auth = initializeAuth(app, {
+    persistence: [browserSessionPersistence, inMemoryPersistence],
+    popupRedirectResolver: browserPopupRedirectResolver,
+  });
+} catch {
+  // Already initialized during HMR — reuse existing instance
+  auth = getAuth(app);
+}
 
 const provider = new GoogleAuthProvider();
 MEET_SCOPES.forEach((scope) => provider.addScope(scope));

@@ -26,30 +26,36 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchConfig = async () => {
+  const fetchConfig = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
       const params = new URLSearchParams(window.location.search);
       const salon = params.get('salon');
       const url = salon ? `/api/config?salon=${salon}` : '/api/config';
-      
-      const res = await fetch(url, { cache: 'no-store' });
+
+      const res = await fetch(url, { cache: 'no-store', signal });
       if (!res.ok) throw new Error('Failed to load configuration');
       const data = await res.json();
+      if (signal?.aborted) return;
       if (data && typeof data === 'object') {
         setConfig(data);
       }
       setError(null);
     } catch (err: any) {
+      if (err?.name === 'AbortError' || signal?.aborted) return;
       console.warn('Using default config due to error:', err);
       setError(err?.message || 'Error loading config');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchConfig();
+    const controller = new AbortController();
+    void fetchConfig(controller.signal);
+    return () => controller.abort();
   }, []);
 
   const updateConfig = async (newConfig: SiteConfig): Promise<boolean> => {
@@ -67,9 +73,11 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
       const data = await res.json();
       setConfig(data);
+      setError(null);
       return true;
     } catch (err: any) {
-      alert(err.message || 'Failed to update config');
+      if (err?.name === 'AbortError') return false;
+      setError(err.message || 'Failed to update config');
       return false;
     }
   };
@@ -82,9 +90,11 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!res.ok) throw new Error('Failed to reset configuration');
       const data = await res.json();
       setConfig(data);
+      setError(null);
       return true;
     } catch (err: any) {
-      alert(err.message || 'Failed to reset config');
+      if (err?.name === 'AbortError') return false;
+      setError(err.message || 'Failed to reset config');
       return false;
     }
   };

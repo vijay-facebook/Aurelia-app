@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, RefreshCw, Sparkles, SlidersHorizontal, Trash2, AlertCircle } from 'lucide-react';
 import { useConfig } from '../context/ConfigContext';
 import {
@@ -65,8 +65,14 @@ export const RecommendedForYou: React.FC<RecommendedForYouProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
+  const abortRef = useRef<AbortController | null>(null);
+
   const fetchRecommendations = useCallback(
     async (currentHistory: BookingHistoryEntry[], currentPrefs: GuestPreferences) => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       setLoading(true);
       setError(null);
       try {
@@ -77,9 +83,11 @@ export const RecommendedForYou: React.FC<RecommendedForYouProps> = ({
             bookingHistory: currentHistory,
             preferences: currentPrefs,
           }),
+          signal: controller.signal,
         });
 
         const data = await res.json().catch(() => ({}));
+        if (controller.signal.aborted) return;
         if (!res.ok) {
           throw new Error(data.error || 'Could not load personalized recommendations.');
         }
@@ -87,9 +95,12 @@ export const RecommendedForYou: React.FC<RecommendedForYouProps> = ({
         setCuratorNote(typeof data.curatorNote === 'string' ? data.curatorNote : '');
         setRecommendations(Array.isArray(data.recommendations) ? data.recommendations : []);
       } catch (err: any) {
+        if (err?.name === 'AbortError' || controller.signal.aborted) return;
         setError(err?.message || 'Unable to generate recommendations right now.');
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     },
     []
@@ -101,18 +112,21 @@ export const RecommendedForYou: React.FC<RecommendedForYouProps> = ({
       const updated = loadBookingHistory();
       setHistory(updated);
       if (!disableAutoFetch) {
-        fetchRecommendations(updated, loadGuestPreferences());
+        void fetchRecommendations(updated, loadGuestPreferences());
       }
     };
     window.addEventListener(HISTORY_UPDATED_EVENT, handleHistoryUpdate);
     return () => window.removeEventListener(HISTORY_UPDATED_EVENT, handleHistoryUpdate);
   }, [disableAutoFetch, fetchRecommendations]);
 
-  // Initial recommendation fetch on mount
+  // Initial recommendation fetch on mount + abort cleanup on unmount
   useEffect(() => {
     if (!disableAutoFetch) {
-      fetchRecommendations(history, preferences);
+      void fetchRecommendations(history, preferences);
     }
+    return () => {
+      abortRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disableAutoFetch]);
 

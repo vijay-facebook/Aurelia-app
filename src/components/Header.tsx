@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
-import { ArrowRight, ExternalLink, X, Menu as MenuIcon, Shield } from 'lucide-react';
+import { ArrowRight, ExternalLink, X, Menu as MenuIcon, Shield, User } from 'lucide-react';
 import { useConfig } from '../context/ConfigContext';
 
 interface HeaderProps {
   onOpenBooking: () => void;
   onNavigate: (sectionId: string) => void;
   activeSection: string;
+  onOpenAuth?: () => void;
+  currentUserLabel?: string | null;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenBooking, onNavigate, activeSection }) => {
+export const Header: React.FC<HeaderProps> = ({
+  onOpenBooking,
+  onNavigate,
+  activeSection,
+  onOpenAuth,
+  currentUserLabel,
+}) => {
   const { config } = useConfig();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -78,6 +86,19 @@ export const Header: React.FC<HeaderProps> = ({ onOpenBooking, onNavigate, activ
 
         {/* CTA Action */}
         <div className="flex items-center gap-3 shrink-0">
+          {onOpenAuth && (
+            <button
+              type="button"
+              onClick={onOpenAuth}
+              title={currentUserLabel ? `Signed in as ${currentUserLabel}` : 'Member Sign In'}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-[#D8C8B4] text-[#1D1612] hover:bg-[#EFE6DA] transition-colors text-xs uppercase tracking-wider font-medium cursor-pointer"
+            >
+              <User className="w-3.5 h-3.5 text-[#8C6A43]" />
+              <span className="max-w-[110px] truncate">
+                {currentUserLabel || 'Sign In'}
+              </span>
+            </button>
+          )}
           <a
             href="/admin"
             title="Admin Portal Login"
@@ -119,6 +140,18 @@ export const Header: React.FC<HeaderProps> = ({ onOpenBooking, onNavigate, activ
               {item.label}
             </button>
           ))}
+          {onOpenAuth && (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenAuth();
+                setMobileMenuOpen(false);
+              }}
+              className="block w-full text-left py-2 hover:text-[#8C6A43] border-t border-[#D8C8B4]/70 pt-3"
+            >
+              {currentUserLabel ? `Account (${currentUserLabel})` : 'Member Sign In'}
+            </button>
+          )}
         </div>
       )}
     </header>

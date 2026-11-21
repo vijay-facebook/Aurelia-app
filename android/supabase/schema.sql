@@ -82,6 +82,12 @@ create policy "Users view own bookings" on public.bookings
 create policy "Users view own loyalty" on public.loyalty_accounts
   for select using (auth.uid() = user_id);
 
+create policy "Users upsert own loyalty" on public.loyalty_accounts
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users update own loyalty" on public.loyalty_accounts
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 create policy "Users manage own documents" on public.client_documents
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 

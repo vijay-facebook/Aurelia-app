@@ -1,3 +1,5 @@
+import { supabase } from '../lib/supabase';
+
 export interface BookingHistoryEntry {
   id: string;
   services: string[];
@@ -93,7 +95,31 @@ export function recordBookingHistory(
   } catch {
     // Ignore storage quota errors cleanly
   }
+
+  void syncAppointmentToSupabase(next[0]);
   return next;
+}
+
+async function syncAppointmentToSupabase(item: BookingHistoryEntry): Promise<void> {
+  if (!supabase || !item.bookingRef) return;
+  try {
+    const { data } = await supabase.auth.getUser();
+    const userId = data?.user?.id;
+    if (!userId) return;
+    await supabase.from('bookings').upsert(
+      {
+        user_id: userId,
+        booking_ref: item.bookingRef,
+        services: item.services,
+        appointment_date: item.date || 'Flexible',
+        time_slot: item.timeSlot || '10:30 AM',
+        status: 'confirmed',
+      },
+      { onConflict: 'booking_ref' }
+    );
+  } catch {
+    // Non-blocking sync when Supabase tables/policies are provisioned
+  }
 }
 
 export function attachMeetLinkToAppointment(
